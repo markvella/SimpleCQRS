@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using ProtoBuf.Meta;
 using Sample.Contracts;
 using Sample.Server.Handlers;
 using SimpleCQRS.Contracts;
@@ -12,6 +13,10 @@ namespace Sample.Server
     {
         static void Main(string[] args)
         {
+            RuntimeTypeModel.Default.Add(typeof(Envelope<HelloWorldRequest>), true);
+            RuntimeTypeModel.Default.Add(typeof(HelloWorldRequest), true);
+            RuntimeTypeModel.Default.Add(typeof(HelloWorldResponse), true);
+            RuntimeTypeModel.Default.CompileInPlace();
             var serviceProvider = new ServiceCollection();
             serviceProvider.AddTransient<IRequestHandler<HelloWorldRequest, HelloWorldResponse>, HelloWorldRequestHandler>();
             using (var provider = serviceProvider.BuildServiceProvider())

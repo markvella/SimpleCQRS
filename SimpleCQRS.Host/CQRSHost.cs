@@ -7,6 +7,8 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
+using System.IO;
+using System.Diagnostics;
 
 namespace SimpleCQRS.Host
 {
@@ -27,14 +29,14 @@ namespace SimpleCQRS.Host
 
         public async Task StartAsync()
         {
-            _model = _connection.CreateModel();
             foreach (var handler in _handlers)
             {
-                var queueResponse = _model.QueueDeclare($"q_{handler.Key.FullName}", false, true, true);
-                _model.ExchangeDeclare($"ex_{handler.Key.FullName}", "fanout", true, false);
-                _model.QueueBind($"q_{handler.Key.FullName}", $"ex_{handler.Key.FullName}", "");
-                var consumer = new EventingBasicConsumer(_model);
-                _model.BasicConsume($"q_{handler.Key.FullName}", true, consumer);
+                var currentModel = _models[handler.Key] = _connection.CreateModel();
+                var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, true, true);
+                currentModel.ExchangeDeclare($"ex_{handler.Key.FullName}", "fanout", true, false);
+                currentModel.QueueBind($"q_{handler.Key.FullName}", $"ex_{handler.Key.FullName}", "");
+                var consumer = new EventingBasicConsumer(currentModel);
+                currentModel.BasicConsume($"q_{handler.Key.FullName}", true, consumer);
 
                 consumer.Received += Consumer_Received;
             }
@@ -46,14 +48,19 @@ namespace SimpleCQRS.Host
         private void Consumer_Received(object sender, BasicDeliverEventArgs e)
         {
             var type = Type.GetType(Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]));
+            var model = _models[type];
             var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
             var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
-            var envelope = JsonConvert.DeserializeObject(Encoding.UTF8.GetString(e.Body), typeof(Envelope<>).MakeGenericType(type));
+            var memStream = new MemoryStream(e.Body);
+            
+            var envelope = ProtoBuf.Serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), memStream);
             var result = service.Process(envelope);
             var message = result.GetAwaiter().GetResult();
 
-            var props = _model.CreateBasicProperties();
-            _model.BasicPublish("", responseQ, props, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message)));
+            var props = model.CreateBasicProperties();
+            memStream = new MemoryStream();
+            ProtoBuf.Serializer.Serialize(memStream, message);
+            model.BasicPublish("", responseQ, props, memStream.ToArray());
 
         }
     }

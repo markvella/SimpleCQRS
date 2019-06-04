@@ -1,10 +1,13 @@
-﻿using SimpleCQRS.Contracts;
+﻿using ProtoBuf;
+using SimpleCQRS.Contracts;
 using System;
 
 namespace Sample.Contracts
 {
-    public class HelloWorldRequest:IRequest
+    [ProtoContract]
+    public class HelloWorldRequest
     {
+        [ProtoMember(1)]
         public string Message { get; set; }
     }
 }

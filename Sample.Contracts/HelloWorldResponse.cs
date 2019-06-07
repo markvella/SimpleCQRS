@@ -1,12 +1,15 @@
-﻿using SimpleCQRS.Contracts;
+﻿using ProtoBuf;
+using SimpleCQRS.Contracts;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace Sample.Contracts
 {
-    public class HelloWorldResponse:IResponse
+    [ProtoContract]
+    public class HelloWorldResponse
     {
+        [ProtoMember(1)]
         public string Message { get; set; }
     }
 }

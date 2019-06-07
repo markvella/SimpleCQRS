@@ -15,19 +15,53 @@ namespace SimpleCQRS
     public class CQRSClient : ICQRSClient, IDisposable
     {
         private readonly IConnection _connection;
-        private readonly IModel _model;
+        private readonly IModel _listenerModel;
+        private readonly IModel[] _publishers;
+        private readonly object[] _locks;
+        private readonly int _poolSize = 8;
+        private int currentModelIdx = 0;
+        private object indexLock;
+        private readonly CustomConsumer _consumer;
+        private string _responseQueueName;
 
         public CQRSClient()
         {
             RabbitMQ.Client.ConnectionFactory factory = new RabbitMQ.Client.ConnectionFactory();
             _connection = factory.CreateConnection();
-            _model = _connection.CreateModel();
+            _listenerModel = _connection.CreateModel();
+
+            _publishers = new IModel[_poolSize];
+            _locks = new object[_poolSize];
+            for (int i=0;i<_poolSize;i++)
+            {
+                _publishers[i] = _connection.CreateModel();
+                _locks[i] = new object();
+            }
+            indexLock = new object();
+            _consumer = new CustomConsumer(_listenerModel);
+            _responseQueueName = $"req_{Guid.NewGuid().ToString()}";
+            DeclareQueue(_responseQueueName).GetAwaiter().GetResult();
+            _listenerModel.BasicConsume(_responseQueueName, true, _consumer);
+            //_model.BasicQos(0, 1, true);
         }
 
         public void Dispose()
         {
             _connection.Dispose();
-            _model.Dispose();
+            _listenerModel.Dispose();
+        }
+
+        private int GetNextModelIdx()
+        {
+            lock (indexLock)
+            {
+                var returnIdx = currentModelIdx++;
+                if (returnIdx >= _poolSize)
+                {
+                    returnIdx = 0;
+                }
+                return returnIdx;
+            }
         }
 
         public async Task<TResponse> Request<T, TResponse>(T Request)
@@ -35,26 +69,25 @@ namespace SimpleCQRS
             var requestType = typeof(T);
             var exchangeName = $"ex_{requestType.FullName}";
             var requestEnvelope = new Envelope<T> { Payload = Request, MessageId = Guid.NewGuid().ToString() };
-            var responseQueueName = $"req_{requestType.FullName}_{requestEnvelope.MessageId}";
 
-            var props = _model.CreateBasicProperties();
+            var props = _listenerModel.CreateBasicProperties();
             Dictionary<string, object> dictionary = new Dictionary<string, object>();
 
             dictionary.Add("type", requestType.AssemblyQualifiedName);
-            dictionary.Add("responsequeue", responseQueueName);
+            dictionary.Add("responsequeue", _responseQueueName);
+            dictionary.Add("requestId", requestEnvelope.MessageId);
             props.Headers = dictionary;
-            await DeclareQueue(responseQueueName);
-            SemaphoreSlim slimLock = new SemaphoreSlim(1, 1);
-            byte[] outAry = new byte[0];
-            var consumer = new CustomConsumer(outAry, slimLock);
-            _model.BasicConsume(responseQueueName, true, consumer);
             var req = Serialize(requestEnvelope);
-            _model.BasicPublish(exchangeName, "", props, req);
-            await slimLock.WaitAsync();
+            var requestPublisherIdx = GetNextModelIdx();
+            _consumer.AddRequest(requestEnvelope.MessageId);
+            lock (_locks[requestPublisherIdx])
+            {
+                _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
+            }
 
-            var memStream = new MemoryStream(outAry);
+            var ary = await _consumer.GetResponse(requestEnvelope.MessageId);
+            var memStream = new MemoryStream(ary);
             var response = ProtoBuf.Serializer.Deserialize<TResponse>(memStream);
-            _model.QueueDeleteNoWait(responseQueueName, false, false);
             return response;
 
         }
@@ -70,7 +103,7 @@ namespace SimpleCQRS
 
         private async Task DeclareQueue(string responseQueueName)
         {
-            _model.QueueDeclareNoWait(responseQueueName, false, false, true, new Dictionary<string, object>());
+            _listenerModel.QueueDeclareNoWait(responseQueueName, false, true, true, new Dictionary<string, object>());
         }
 
         private async Task<BasicGetResult> GetResult(IModel model, string queue)
@@ -84,21 +117,35 @@ namespace SimpleCQRS
         }
     }
 
+    public class ResponseObject
+    {
+        public SemaphoreSlim Semaphore { get; set; }
+        public byte[] Response { get; set; }
+    }
+
     public class CustomConsumer : DefaultBasicConsumer
     {
-        private byte[] _context;
-        private SemaphoreSlim _slimLock;
-
-        public CustomConsumer(byte[] context, SemaphoreSlim slimLock)
+        private Dictionary<string, ResponseObject> responses = new Dictionary<string,ResponseObject>();
+        public void AddRequest(string requestId)
         {
-            _context = context;
-            _slimLock = slimLock;
+            responses.Add(requestId, new ResponseObject { Semaphore = new SemaphoreSlim(0, 1), Response = null });
+        }
+
+        public async Task<byte[]> GetResponse(string requestId)
+        {
+            await responses[requestId].Semaphore.WaitAsync();
+            return responses[requestId].Response;
+        }
+
+        public CustomConsumer(IModel model):base(model)
+        {
         }
         public override void HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
         {
-            base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
-            _context = body;
-            _slimLock.Release();
+            //base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
+            var requestId = Encoding.UTF8.GetString((byte[])properties.Headers["requestId"]);
+            responses[requestId].Response = body;
+            responses[requestId].Semaphore.Release();
         }
     }
 }

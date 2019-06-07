@@ -50,6 +50,7 @@ namespace SimpleCQRS.Host
             var type = Type.GetType(Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]));
             var model = _models[type];
             var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
+            var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
             var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
             var memStream = new MemoryStream(e.Body);
             
@@ -58,6 +59,9 @@ namespace SimpleCQRS.Host
             var message = result.GetAwaiter().GetResult();
 
             var props = model.CreateBasicProperties();
+            Dictionary<string, object> headers = new Dictionary<string, object>();
+            headers.Add("requestId", requestId);
+            props.Headers = headers;
             memStream = new MemoryStream();
             ProtoBuf.Serializer.Serialize(memStream, message);
             model.BasicPublish("", responseQ, props, memStream.ToArray());

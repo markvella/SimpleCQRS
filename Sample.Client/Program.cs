@@ -29,6 +29,7 @@ namespace Sample.Client
                     if (i == 1)
                         sw.Start();
                     var response = await client.Request<HelloWorldRequest, HelloWorldResponse>(new HelloWorldRequest { Message = Guid.NewGuid().ToString() });
+                    Console.WriteLine(response.Message);
                 }
                 sw.Stop();
                 Console.WriteLine(sw.ElapsedMilliseconds / 999);

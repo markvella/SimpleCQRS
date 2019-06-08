@@ -79,7 +79,10 @@ namespace SimpleCQRS
             props.Headers = dictionary;
             var req = Serialize(requestEnvelope);
             _consumers[requestPublisherIdx%_inPoolSize].AddRequest(requestEnvelope.MessageId);
-            _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
+            lock (_locks[requestPublisherIdx])
+            {
+                _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
+            }
 
             var ary = await _consumers[requestPublisherIdx % _inPoolSize].GetResponse(requestEnvelope.MessageId);
             var memStream = new MemoryStream(ary);

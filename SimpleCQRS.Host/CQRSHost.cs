@@ -32,7 +32,7 @@ namespace SimpleCQRS.Host
             foreach (var handler in _handlers)
             {
                 var currentModel = _models[handler.Key] = _connection.CreateModel();
-                var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, true, true);
+                var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, false, true);
                 currentModel.ExchangeDeclare($"ex_{handler.Key.FullName}", "fanout", true, false);
                 currentModel.QueueBind($"q_{handler.Key.FullName}", $"ex_{handler.Key.FullName}", "");
                 var consumer = new EventingBasicConsumer(currentModel);
@@ -47,6 +47,9 @@ namespace SimpleCQRS.Host
 
         private void Consumer_Received(object sender, BasicDeliverEventArgs e)
         {
+            //Console.WriteLine("Message received");
+            if (Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]) == "ping")
+                return;
             var type = Type.GetType(Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]));
             var model = _models[type];
             var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);

@@ -20,7 +20,7 @@ namespace SimpleCQRS
         private readonly IModel[] _publishers;
         private readonly object[] _locks;
         private readonly int _outPoolSize = 8;
-        private readonly int _inPoolSize = 8;
+        private readonly int _inPoolSize = 1;
         private int currentModelIdx = 0;
         private object indexLock;
         //private readonly CustomConsumer _consumer;

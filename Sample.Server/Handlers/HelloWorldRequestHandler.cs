@@ -1,9 +1,6 @@
-﻿using Sample.Contracts;
+﻿using System.Threading.Tasks;
+using Sample.Contracts;
 using SimpleCQRS.Contracts;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Sample.Server.Handlers
 {

@@ -1,14 +1,11 @@
-﻿using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
-using SimpleCQRS.Contracts;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
-using System.IO;
-using System.Diagnostics;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using SimpleCQRS.Contracts;
 
 namespace SimpleCQRS.Host
 {

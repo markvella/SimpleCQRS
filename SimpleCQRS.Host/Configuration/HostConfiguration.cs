@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using SimpleCQRS.Contracts;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host.Configuration
 {
@@ -9,9 +11,12 @@ namespace SimpleCQRS.Host.Configuration
         internal ConnectionConfiguration Connection { get; private set; }
         internal List<OperationConfiguration> Operations { get; private set; }
 
+        internal ISerializer Serializer { get; private set; }
+        
         public HostConfiguration()
         {
             Operations = new List<OperationConfiguration>();
+            Serializer = new NullSerializer();
         }
 
         public IHostConfiguration ConnectTo(
@@ -25,15 +30,21 @@ namespace SimpleCQRS.Host.Configuration
             return this;
         }
 
-        public IHostConfiguration AddOperation<T>(string operationName, Action<T> handler)
+        public IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler)
         {
-            Operations.Add(new OperationConfiguration<T>(operationName, handler));
+            Operations.Add(new OperationConfiguration<TRequest, TResponse>(operationName, handler));
             return this;
         }
 
         public IHostConfiguration SetService(string serviceName)
         {
             ServiceName = serviceName;
+            return this;
+        }
+
+        public IHostConfiguration Using(ISerializer serializer)
+        {
+            Serializer = serializer;
             return this;
         }
     }

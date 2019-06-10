@@ -8,7 +8,7 @@ namespace Sample.Server.Handlers
     {
         public override async Task<HelloWorldResponse> Process(Envelope<HelloWorldRequest> request)
         {
-            return new HelloWorldResponse { Message = $"Hello World {request.Payload.Message}" };
+            return new HelloWorldResponse { Message = $"Hello World {request.Message.Message}" };
         }
     }
 }

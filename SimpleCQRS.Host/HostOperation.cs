@@ -1,30 +1,38 @@
 ﻿using System;
-using System.Threading;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using SimpleCQRS.Contracts;
 using SimpleCQRS.Host.Configuration;
-using SimpleCQRS.Host.Extensions;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
 {
-    public interface IHostOperation : IDisposable
+    public interface IHostOperation<TRequest, TResponse> : IDisposable
     {
-
+        void SendReply(Envelope<TRequest> env, object reply);
     }
-
-    internal class HostOperation : IHostOperation
+   
+    internal sealed class HostOperation<TRequest, TResponse> : IHostOperation<TRequest, TResponse>
     {
-        private readonly OperationConfiguration _operation;
+        private readonly OperationConfiguration<TRequest, TResponse> _operation;
         private readonly IConnection _connection;
         private readonly IModel _model;
         private bool _disposed = false;
-        private SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+        private readonly object _lock = new object();
 
-        internal HostOperation(OperationConfiguration operation, IConnection connection, string exchangeName)
+        internal HostOperation(
+            OperationConfiguration<TRequest, TResponse> operation,
+            ISerializer serializer,
+            IConnection connection,
+            string exchangeName,
+            string serviceName)
         {
+            ServiceName = serviceName;
+            ExchangeName = exchangeName;
+            Serializer = serializer;
+
             _operation = operation;
             _connection = connection;
-            ExchangeName = exchangeName;
             _model = _connection.CreateModel();
 
             var queueName = QueueName;
@@ -33,25 +41,50 @@ namespace SimpleCQRS.Host
 
             var consumer = new EventingBasicConsumer(_model);
             _model.BasicConsume(queueName, false, consumer);
-            consumer.Received += Consumer_Received;
+            consumer.Received += OnMessageReceived;
         }
+        
+        private ISerializer Serializer { get; }
 
+        private Type MessageType => _operation.RequestType;
+
+        private string ServiceName { get; }
+        
         private string ExchangeName { get; }
 
-        private string QueueName => $"{_operation.OperationName}.operation.queue";
+        private string QueueName => $"{ServiceName}.{_operation.OperationName}.operation.queue";
 
-        private void Consumer_Received(object sender, BasicDeliverEventArgs e)
+        public void SendReply(Envelope<TRequest> env, object reply)
         {
-            //Console.WriteLine("Message received");
-
-            var typeName = e.GetHeaderValue("type");
-
-            if (typeName.Equals("ping"))
+            throw new NotImplementedException();
+        }
+        
+        private void OnMessageReceived(object sender, BasicDeliverEventArgs e)
+        {
+            try
             {
-                return;
-            }
+                var message = Serializer.Deserialize(e.Body, MessageType);
+                //var envelope = message.Wrap();
+                
+                lock (_lock)
+                {
+                    //MessageHandler(obj, this);
 
-            var type = Type.GetType(typeName);
+                    // Acknowledge the message
+                    _model.BasicAck(e.DeliveryTag, false);
+                }
+            }
+            catch (Exception exception)
+            {
+                lock (_lock)
+                {
+                    // Acknowledge the message
+                    _model.BasicNack(e.DeliveryTag, false, true);
+                }
+
+                throw;
+            }
+            
             //var model = _models[type];
             //var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
             //var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
@@ -71,6 +104,7 @@ namespace SimpleCQRS.Host
             //model.BasicPublish("", responseQ, props, memStream.ToArray());
         }
 
+        
         public void Dispose()
         {
             // Dispose of unmanaged resources.
@@ -81,16 +115,18 @@ namespace SimpleCQRS.Host
         }
 
         // Protected implementation of Dispose pattern.
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (_disposed)
                 return;
 
             if (disposing)
             {
-                _model?.Dispose();
-                _connection?.Dispose();
-                _lock.Dispose();
+                lock (_lock)
+                {
+                    _model?.Dispose();
+                    _connection?.Dispose();
+                }
             }
 
             _disposed = true;

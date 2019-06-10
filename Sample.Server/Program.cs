@@ -5,6 +5,7 @@ using Sample.Contracts;
 using Sample.Server.Handlers;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Host;
+using SimpleCQRS.Serializers.Json;
 
 namespace Sample.Server
 {
@@ -21,14 +22,15 @@ namespace Sample.Server
             {
                 c.SetService("SampleServer")
                 .ConnectTo()
-                .AddOperation<HelloWorldRequest>("HelloWorld", req =>
+                .Using(new JsonSerializer())
+                .AddOperation<HelloWorldRequest, HelloWorldResponse>("HelloWorld", (env, caller) =>
                 {
+                    var message = env.Message;
                     // Do nothing
                 });
             });
 
             await host.StartAsync();
-
 
             var serviceProvider = new ServiceCollection();
             serviceProvider.AddTransient<IRequestHandler<HelloWorldRequest, HelloWorldResponse>, HelloWorldRequestHandler>();
@@ -37,8 +39,11 @@ namespace Sample.Server
                 await new HostBuilder()
                     .AddHandler<HelloWorldRequest, IRequestHandler<HelloWorldRequest, HelloWorldResponse>>()
                     .BindServiceProvider(provider)
-                    .Build().StartAsync();
+                    .Build()
+                    .StartAsync();
             }
+
+            await host.StopAsync();
         }
     }
 }

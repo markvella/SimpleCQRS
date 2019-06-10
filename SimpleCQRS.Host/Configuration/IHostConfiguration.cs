@@ -1,4 +1,6 @@
 ﻿using System;
+using SimpleCQRS.Contracts;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host.Configuration
 {
@@ -13,6 +15,8 @@ namespace SimpleCQRS.Host.Configuration
 
         IHostConfiguration SetService(string serviceName);
 
-        IHostConfiguration AddOperation<T>(string operationName, Action<T> handler);
+        IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler);
+
+        IHostConfiguration Using(ISerializer serializer);
     }
 }

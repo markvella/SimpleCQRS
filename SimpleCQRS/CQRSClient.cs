@@ -67,7 +67,7 @@ namespace SimpleCQRS
         {
             var requestType = typeof(T);
             var exchangeName = $"ex_{requestType.FullName}";
-            var requestEnvelope = new Envelope<T> { Payload = Request, MessageId = Guid.NewGuid().ToString() };
+            var requestEnvelope = new Envelope<T> { Message = Request, MessageId = Guid.NewGuid().ToString() };
             var requestPublisherIdx = GetNextModelIdx();
 
             var props = _listenerModel.CreateBasicProperties();

@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using RabbitMQ.Client;
 using SimpleCQRS.Host.Configuration;
 using SimpleCQRS.Host.Extensions;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
 {
@@ -12,7 +15,7 @@ namespace SimpleCQRS.Host
     {
         private readonly HostConfiguration _config;
         private IConnection _connection;
-        private readonly List<HostOperation> _operations;
+        private readonly List<IDisposable> _operations;
 
         private SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
         private bool _isStarted = false;
@@ -21,7 +24,7 @@ namespace SimpleCQRS.Host
         internal CQRSHostV2(HostConfiguration config)
         {
             _config = config;
-            _operations = new List<HostOperation>();
+            _operations = new List<IDisposable>();
         }
 
         public void Dispose()
@@ -51,6 +54,10 @@ namespace SimpleCQRS.Host
 
         private IList<OperationConfiguration> Operations => _config?.Operations;
 
+        private ISerializer Serializer => _config?.Serializer;
+        
+        private string ServiceName => _config?.ServiceName;
+        
         private string ExchangeName => $"{_config.ServiceName}.service.exchange";
 
         public async Task StartAsync()
@@ -82,17 +89,32 @@ namespace SimpleCQRS.Host
                     model.ExchangeDeclare(ExchangeName, "direct", true, false);
                 }
 
+                
                 // Create a model, queue, bindings and consumer for each operation
+                var hostOperationGenericType = typeof(HostOperation<,>);
+
                 foreach (var operation in _config.Operations)
                 {
-                    _operations.Add(new HostOperation(operation, _connection, ExchangeName));
+                    Type[] hostOperationTypeArgs = { operation.RequestType, operation.ResponseType };
+                    var hostOperationType = hostOperationGenericType.MakeGenericType(hostOperationTypeArgs);
+
+                    object[] hostOperationParams = {operation, Serializer, _connection, ExchangeName, ServiceName};
+
+                    var hostOperation = (IDisposable) Activator.CreateInstance(
+                        hostOperationType,
+                        BindingFlags.NonPublic | BindingFlags.Instance,
+                        null,
+                        hostOperationParams,
+                        CultureInfo.InvariantCulture);
+                    
+                    _operations.Add(hostOperation);
                 }
 
                 _isStarted = true;
             }
             finally
             {
-                _lock.Release();
+                _lock?.Release();
             }
         }
 
@@ -120,7 +142,7 @@ namespace SimpleCQRS.Host
             }
             finally
             {
-                _lock.Release();
+                _lock?.Release();
             }
         }
 

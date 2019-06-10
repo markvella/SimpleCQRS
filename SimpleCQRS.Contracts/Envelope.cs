@@ -9,9 +9,11 @@ namespace SimpleCQRS.Contracts
     public class Envelope<T>
     {
         [ProtoMember(1)]
-        public T Payload { get; set; }
+        public T Message { get; set; }
+
         [ProtoIgnore]
         public string MessageType { get { return typeof(T).FullName; } }
+        
         [ProtoMember(2)]
         public string MessageId { get; set; }
     }

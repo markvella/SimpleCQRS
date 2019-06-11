@@ -7,11 +7,6 @@ using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
 {
-    public interface IHostOperation<TRequest, TResponse> : IDisposable
-    {
-        void SendReply(Envelope<TRequest> env, object reply);
-    }
-   
     internal sealed class HostOperation<TRequest, TResponse> : IHostOperation<TRequest, TResponse>
     {
         private readonly OperationConfiguration<TRequest, TResponse> _operation;

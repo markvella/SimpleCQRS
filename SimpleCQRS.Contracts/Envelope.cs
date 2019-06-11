@@ -16,5 +16,8 @@ namespace SimpleCQRS.Contracts
         
         [ProtoMember(2)]
         public string MessageId { get; set; }
+        
+        [ProtoIgnore]
+        public string ReplyTo { get; set; }
     }
 }

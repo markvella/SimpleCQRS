@@ -46,13 +46,15 @@ namespace SimpleCQRS.Host
         
         private ISerializer Serializer { get; }
 
-        private Type MessageType => _operation.RequestType;
+        private Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> MessageHandler => _operation.Handler;
 
         private string ServiceName { get; }
         
         private string ExchangeName { get; }
 
-        private string QueueName => $"{ServiceName}.{_operation.OperationName}.operation.queue";
+        private string OperationName => _operation.OperationName;
+        
+        private string QueueName => $"{ServiceName}.{OperationName}.operation.queue";
 
         public void SendReply(Envelope<TRequest> env, object reply)
         {
@@ -63,13 +65,14 @@ namespace SimpleCQRS.Host
         {
             try
             {
-                var message = Serializer.Deserialize(e.Body, MessageType);
-                //var envelope = message.Wrap();
+                var envelope = ParseMessage(e);
+
+                // Execute the message handler within the lock to ensure
+                // the reply is safely done on the same IModel
+                MessageHandler(envelope, this);
                 
                 lock (_lock)
                 {
-                    //MessageHandler(obj, this);
-
                     // Acknowledge the message
                     _model.BasicAck(e.DeliveryTag, false);
                 }
@@ -82,28 +85,25 @@ namespace SimpleCQRS.Host
                     _model.BasicNack(e.DeliveryTag, false, true);
                 }
 
+                // TODO: Add logging
+                
                 throw;
             }
-            
-            //var model = _models[type];
-            //var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
-            //var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
-            //var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
-            //var memStream = new MemoryStream(e.Body);
-
-            //var envelope = ProtoBuf.Serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), memStream);
-            //var result = service.Process(envelope);
-            //var message = result.GetAwaiter().GetResult();
-
-            //var props = model.CreateBasicProperties();
-            //Dictionary<string, object> headers = new Dictionary<string, object>();
-            //headers.Add("requestId", requestId);
-            //props.Headers = headers;
-            //memStream = new MemoryStream();
-            //ProtoBuf.Serializer.Serialize(memStream, message);
-            //model.BasicPublish("", responseQ, props, memStream.ToArray());
         }
 
+        private Envelope<TRequest> ParseMessage(BasicDeliverEventArgs e)
+        {
+            var message = Serializer.Deserialize<TRequest>(e.Body);
+            
+            var envelope = new Envelope<TRequest>
+            {
+                Message = message,
+                MessageId = e.BasicProperties.CorrelationId,
+                ReplyTo = e.BasicProperties.ReplyTo
+            };
+
+            return envelope;
+        }
         
         public void Dispose()
         {

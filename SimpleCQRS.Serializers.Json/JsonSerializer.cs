@@ -17,7 +17,17 @@ namespace SimpleCQRS.Serializers.Json
             };
         }
         
-        public byte[] Serialize(object obj)
+        public object Deserialize(byte[] data, Type targetType)
+        {
+            using (var ms = new MemoryStream(data))
+            using (var sr = new StreamReader(ms))
+            using (var reader = new JsonTextReader(sr))
+            {
+                return _serializer.Deserialize(reader, targetType);
+            }
+        }
+
+        public byte[] Serialize<T>(T obj)
         {
             using (var ms = new MemoryStream())
             using (var sw = new StreamWriter(ms))
@@ -28,13 +38,13 @@ namespace SimpleCQRS.Serializers.Json
             }
         }
 
-        public object Deserialize(byte[] data, Type targetType)
+        public T Deserialize<T>(byte[] data)
         {
             using (var ms = new MemoryStream(data))
             using (var sr = new StreamReader(ms))
             using (var reader = new JsonTextReader(sr))
             {
-                return _serializer.Deserialize(reader, targetType);
+                return _serializer.Deserialize<T>(reader);
             }
         }
     }

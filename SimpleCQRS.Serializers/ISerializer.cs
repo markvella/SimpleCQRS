@@ -4,8 +4,8 @@ namespace SimpleCQRS.Serializers
 {
     public interface ISerializer
     {
-        byte[] Serialize(object obj);
+        byte[] Serialize<T>(T obj);
 
-        object Deserialize(byte[] data, Type targetType);
+        T Deserialize<T>(byte[] data);
     }
 }

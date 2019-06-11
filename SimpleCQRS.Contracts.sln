@@ -11,7 +11,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sample.Contracts", "Sample.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sample.Server", "Sample.Server\Sample.Server.csproj", "{EAF489E1-853A-414E-B247-DCEADEC9CB2E}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Client", "SimpleCQRS\SimpleCQRS.Client.csproj", "{BF8259CD-AA5F-4B8D-9F5F-A366BE4D918A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Client", "SimpleCQRS.Client\SimpleCQRS.Client.csproj", "{BF8259CD-AA5F-4B8D-9F5F-A366BE4D918A}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Host", "SimpleCQRS.Host\SimpleCQRS.Host.csproj", "{404E861F-7081-4368-BFF9-929347C0B144}"
 EndProject

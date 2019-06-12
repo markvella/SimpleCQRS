@@ -3,6 +3,7 @@ using ProtoBuf;
 using RabbitMQ.Client;
 using SimpleCQRS.Contracts;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -18,11 +19,13 @@ namespace SimpleCQRS
         private readonly IModel _listenerModel;
         private readonly IModel[] _publishers;
         private readonly object[] _locks;
-        private readonly int _poolSize = 8;
+        private readonly int _outPoolSize = 8;
+        private readonly int _inPoolSize = 1;
         private int currentModelIdx = 0;
         private object indexLock;
-        private readonly CustomConsumer _consumer;
-        private string _responseQueueName;
+        //private readonly CustomConsumer _consumer;
+        private readonly CustomConsumer[] _consumers;
+        private string[] _responseQueueName;
 
         public CQRSClient()
         {
@@ -30,18 +33,22 @@ namespace SimpleCQRS
             _connection = factory.CreateConnection();
             _listenerModel = _connection.CreateModel();
 
-            _publishers = new IModel[_poolSize];
-            _locks = new object[_poolSize];
-            for (int i=0;i<_poolSize;i++)
+            _publishers = new IModel[_outPoolSize];
+            _locks = new object[_outPoolSize];
+            for (int i=0;i<_outPoolSize;i++)
             {
                 _publishers[i] = _connection.CreateModel();
                 _locks[i] = new object();
             }
-            indexLock = new object();
-            _consumer = new CustomConsumer(_listenerModel);
-            _responseQueueName = $"req_{Guid.NewGuid().ToString()}";
-            DeclareQueue(_responseQueueName).GetAwaiter().GetResult();
-            _listenerModel.BasicConsume(_responseQueueName, true, _consumer);
+            _consumers = new CustomConsumer[_inPoolSize];
+            _responseQueueName = new string[_inPoolSize];
+            for (int i=0;i<_inPoolSize; i++)
+            {
+                _responseQueueName[i] = $"req_{Guid.NewGuid().ToString()}";
+                DeclareQueue(_responseQueueName[i]).GetAwaiter().GetResult();
+                _consumers[i] = new CustomConsumer(_listenerModel);
+                _listenerModel.BasicConsume(_responseQueueName[i], true, _consumers[i]);
+            }
             //_model.BasicQos(0, 1, true);
         }
 
@@ -53,15 +60,7 @@ namespace SimpleCQRS
 
         private int GetNextModelIdx()
         {
-            lock (indexLock)
-            {
-                var returnIdx = currentModelIdx++;
-                if (returnIdx >= _poolSize)
-                {
-                    returnIdx = 0;
-                }
-                return returnIdx;
-            }
+            return currentModelIdx++ % _outPoolSize;            
         }
 
         public async Task<TResponse> Request<T, TResponse>(T Request)
@@ -69,23 +68,23 @@ namespace SimpleCQRS
             var requestType = typeof(T);
             var exchangeName = $"ex_{requestType.FullName}";
             var requestEnvelope = new Envelope<T> { Payload = Request, MessageId = Guid.NewGuid().ToString() };
+            var requestPublisherIdx = GetNextModelIdx();
 
             var props = _listenerModel.CreateBasicProperties();
             Dictionary<string, object> dictionary = new Dictionary<string, object>();
 
             dictionary.Add("type", requestType.AssemblyQualifiedName);
-            dictionary.Add("responsequeue", _responseQueueName);
+            dictionary.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
             dictionary.Add("requestId", requestEnvelope.MessageId);
             props.Headers = dictionary;
             var req = Serialize(requestEnvelope);
-            var requestPublisherIdx = GetNextModelIdx();
-            _consumer.AddRequest(requestEnvelope.MessageId);
+            _consumers[requestPublisherIdx%_inPoolSize].AddRequest(requestEnvelope.MessageId);
             lock (_locks[requestPublisherIdx])
             {
                 _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
             }
 
-            var ary = await _consumer.GetResponse(requestEnvelope.MessageId);
+            var ary = await _consumers[requestPublisherIdx % _inPoolSize].GetResponse(requestEnvelope.MessageId);
             var memStream = new MemoryStream(ary);
             var response = ProtoBuf.Serializer.Deserialize<TResponse>(memStream);
             return response;
@@ -105,16 +104,6 @@ namespace SimpleCQRS
         {
             _listenerModel.QueueDeclareNoWait(responseQueueName, false, true, true, new Dictionary<string, object>());
         }
-
-        private async Task<BasicGetResult> GetResult(IModel model, string queue)
-        {
-            BasicGetResult result = null;
-            while (result == null)
-            {
-                result = model.BasicGet(queue, true);
-            }
-            return result;
-        }
     }
 
     public class ResponseObject
@@ -125,16 +114,17 @@ namespace SimpleCQRS
 
     public class CustomConsumer : DefaultBasicConsumer
     {
-        private Dictionary<string, ResponseObject> responses = new Dictionary<string,ResponseObject>();
+        private ConcurrentDictionary<string, ResponseObject> responses = new ConcurrentDictionary<string,ResponseObject>();
         public void AddRequest(string requestId)
         {
-            responses.Add(requestId, new ResponseObject { Semaphore = new SemaphoreSlim(0, 1), Response = null });
+            responses.TryAdd(requestId, new ResponseObject { Semaphore = new SemaphoreSlim(0, 1), Response = null });
         }
 
         public async Task<byte[]> GetResponse(string requestId)
         {
-            await responses[requestId].Semaphore.WaitAsync();
-            return responses[requestId].Response;
+            var response = responses[requestId];
+            await response.Semaphore.WaitAsync();
+            return response.Response;
         }
 
         public CustomConsumer(IModel model):base(model)
@@ -142,10 +132,11 @@ namespace SimpleCQRS
         }
         public override void HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
         {
-            //base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
+            base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
             var requestId = Encoding.UTF8.GetString((byte[])properties.Headers["requestId"]);
-            responses[requestId].Response = body;
-            responses[requestId].Semaphore.Release();
+            var response = responses[requestId];
+            response.Response = body;
+            response.Semaphore.Release();
         }
     }
 }

@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Sample.Contracts\Sample.Contracts.csproj" />
+    <ProjectReference Include="..\SimpleCQRS.Serializers.Protobuf\SimpleCQRS.Serializers.Protobuf.csproj" />
     <ProjectReference Include="..\SimpleCQRS\SimpleCQRS.Client.csproj" />
   </ItemGroup>
 

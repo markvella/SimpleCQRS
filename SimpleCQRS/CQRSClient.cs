@@ -27,8 +27,9 @@ namespace SimpleCQRS
         private readonly CustomConsumer[] _consumers;
         private string[] _responseQueueName;
         private string _serviceName;
+        private readonly ISerializer _serializer;
 
-        public CQRSClient(string service)
+        public CQRSClient(ISerializer serializer, string service)
         {
             RabbitMQ.Client.ConnectionFactory factory = new RabbitMQ.Client.ConnectionFactory();
             _connection = factory.CreateConnection();
@@ -51,6 +52,8 @@ namespace SimpleCQRS
                 _consumers[i] = new CustomConsumer(_listenerModel);
                 _listenerModel.BasicConsume(_responseQueueName[i], true, _consumers[i]);
             }
+
+            _serializer = serializer;
         }
 
         public void Dispose()
@@ -82,7 +85,7 @@ namespace SimpleCQRS
             dictionary.Add("requestId", requestEnvelope.MessageId);
             props.Headers = dictionary;
             
-            var req = Serialize(requestEnvelope);
+            var req = await _serializer.Serialize(requestEnvelope);
             _consumers[requestPublisherIdx%_inPoolSize].AddRequest(requestEnvelope.MessageId);
             lock (_locks[requestPublisherIdx])
             {
@@ -90,8 +93,7 @@ namespace SimpleCQRS
             }
 
             var ary = await _consumers[requestPublisherIdx % _inPoolSize].GetResponse(requestEnvelope.MessageId);
-            var memStream = new MemoryStream(ary);
-            var response = ProtoBuf.Serializer.Deserialize<TResponse>(memStream);
+            var response = await _serializer.Deserialize<TResponse>(ary);
             return response;
 
         }

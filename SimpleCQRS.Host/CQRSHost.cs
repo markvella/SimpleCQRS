@@ -20,13 +20,15 @@ namespace SimpleCQRS.Host
         private Dictionary<Type, IModel> _models = new Dictionary<Type, IModel>();
         private IModel _model;
         private readonly string _serviceName;
+        private readonly ISerializer _serializer;
 
-        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider,string serviceName)
+        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider, ISerializer serializer,string serviceName)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
             _connection = new ConnectionFactory().CreateConnection();
             _serviceName = serviceName;
+            _serializer = serializer;
         }
 
         public async Task StartAsync()
@@ -62,9 +64,8 @@ namespace SimpleCQRS.Host
             var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
             var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
             var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
-            var memStream = new MemoryStream(e.Body);
             
-            var envelope = ProtoBuf.Serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), memStream);
+            var envelope = _serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), e.Body).GetAwaiter().GetResult();
             var result = service.Process(envelope);
             var message = result.GetAwaiter().GetResult();
 
@@ -72,9 +73,7 @@ namespace SimpleCQRS.Host
             Dictionary<string, object> headers = new Dictionary<string, object>();
             headers.Add("requestId", requestId);
             props.Headers = headers;
-            memStream = new MemoryStream();
-            ProtoBuf.Serializer.Serialize(memStream, message);
-            model.BasicPublish("", responseQ, props, memStream.ToArray());
+            model.BasicPublish("", responseQ, props, _serializer.Serialize(message).GetAwaiter().GetResult());
 
         }
     }

@@ -26,7 +26,6 @@ namespace Sample.Server
                 new HostBuilder()
                     .AddHandler<HelloWorldRequest, IRequestHandler<HelloWorldRequest, HelloWorldResponse>>()
                     .BindServiceProvider(provider)
-                    .UsingSerializer<ProtobufSerializer>()
                     .WithServiceName("HelloWorldSample")
                     .Build().StartAsync().GetAwaiter().GetResult();
             }

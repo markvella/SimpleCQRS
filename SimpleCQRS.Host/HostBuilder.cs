@@ -1,6 +1,7 @@
 ﻿using SimpleCQRS.Contracts;
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SimpleCQRS.Host
 {
@@ -21,6 +22,7 @@ namespace SimpleCQRS.Host
             _serviceName = service;
             return this;
         }
+        
         public HostBuilder BindServiceProvider(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
@@ -28,7 +30,7 @@ namespace SimpleCQRS.Host
         }
         public ICQRSHost Build()
         {
-            return new CQRSHost(_handlers, _serviceProvider, _serviceName);
+            return new CQRSHost(_handlers, _serviceProvider, (ISerializer)_serviceProvider.GetRequiredService(typeof(ISerializer)), _serviceName);
         }
     }
 }

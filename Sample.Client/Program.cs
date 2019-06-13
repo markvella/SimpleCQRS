@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using SimpleCQRS.Serializers.Protobuf;
 
 namespace Sample.Client
 {
@@ -27,7 +28,7 @@ namespace Sample.Client
             RuntimeTypeModel.Default.CompileInPlace();
             long totalTime = 0;
             int requests = 100000;
-            using (var client = new CQRSClient("HelloWorldSample"))
+            using (var client = new CQRSClient(new ProtobufSerializer(), "HelloWorldSample"))
             {
                 List<Task<DateTime>> tasks = new List<Task<DateTime>>();
                 Stopwatch sw = new Stopwatch();

@@ -24,6 +24,7 @@ namespace Sample.Server
                 new HostBuilder()
                     .AddHandler<HelloWorldRequest, IRequestHandler<HelloWorldRequest, HelloWorldResponse>>()
                     .BindServiceProvider(provider)
+                    .WithServiceName("HelloWorldSample")
                     .Build().StartAsync().GetAwaiter().GetResult();
             }
 

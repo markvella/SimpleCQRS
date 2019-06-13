@@ -19,19 +19,21 @@ namespace SimpleCQRS
         private readonly IModel _listenerModel;
         private readonly IModel[] _publishers;
         private readonly object[] _locks;
-        private readonly int _outPoolSize = 8;
+        private readonly int _outPoolSize = 4;
         private readonly int _inPoolSize = 1;
         private int currentModelIdx = 0;
         private object indexLock;
         //private readonly CustomConsumer _consumer;
         private readonly CustomConsumer[] _consumers;
         private string[] _responseQueueName;
+        private string _serviceName;
 
-        public CQRSClient()
+        public CQRSClient(string service)
         {
             RabbitMQ.Client.ConnectionFactory factory = new RabbitMQ.Client.ConnectionFactory();
             _connection = factory.CreateConnection();
             _listenerModel = _connection.CreateModel();
+            _serviceName = service;
 
             _publishers = new IModel[_outPoolSize];
             _locks = new object[_outPoolSize];
@@ -49,7 +51,6 @@ namespace SimpleCQRS
                 _consumers[i] = new CustomConsumer(_listenerModel);
                 _listenerModel.BasicConsume(_responseQueueName[i], true, _consumers[i]);
             }
-            //_model.BasicQos(0, 1, true);
         }
 
         public void Dispose()
@@ -66,22 +67,26 @@ namespace SimpleCQRS
         public async Task<TResponse> Request<T, TResponse>(T Request)
         {
             var requestType = typeof(T);
-            var exchangeName = $"ex_{requestType.FullName}";
+            var exchangeName = $"ex_{_serviceName}";
             var requestEnvelope = new Envelope<T> { Payload = Request, MessageId = Guid.NewGuid().ToString() };
             var requestPublisherIdx = GetNextModelIdx();
 
             var props = _listenerModel.CreateBasicProperties();
+            props.DeliveryMode = 1;
+            props.Persistent = false;
+            
             Dictionary<string, object> dictionary = new Dictionary<string, object>();
 
             dictionary.Add("type", requestType.AssemblyQualifiedName);
             dictionary.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
             dictionary.Add("requestId", requestEnvelope.MessageId);
             props.Headers = dictionary;
+            
             var req = Serialize(requestEnvelope);
             _consumers[requestPublisherIdx%_inPoolSize].AddRequest(requestEnvelope.MessageId);
             lock (_locks[requestPublisherIdx])
             {
-                _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
+                _publishers[requestPublisherIdx].BasicPublish(exchangeName, requestType.FullName, props, req);
             }
 
             var ary = await _consumers[requestPublisherIdx % _inPoolSize].GetResponse(requestEnvelope.MessageId);

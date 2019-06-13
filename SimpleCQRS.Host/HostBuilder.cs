@@ -10,7 +10,6 @@ namespace SimpleCQRS.Host
         private Dictionary<Type, Type> _handlers = new Dictionary<Type, Type>();
         private IServiceProvider _serviceProvider;
         private string _serviceName;
-        private Type _serializerType;
 
         public HostBuilder AddHandler<TRequest, TRequestHandler>() where TRequestHandler:IRequestHandler
         {
@@ -23,12 +22,7 @@ namespace SimpleCQRS.Host
             _serviceName = service;
             return this;
         }
-
-        public HostBuilder UsingSerializer<T>() where T : ISerializer
-        {
-            _serializerType = typeof(T);
-            return this;
-        }
+        
         public HostBuilder BindServiceProvider(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;

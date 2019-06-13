@@ -19,22 +19,29 @@ namespace SimpleCQRS.Host
         private readonly IConnection _connection;
         private Dictionary<Type, IModel> _models = new Dictionary<Type, IModel>();
         private IModel _model;
+        private readonly string _serviceName;
 
-        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider)
+        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider,string serviceName)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
             _connection = new ConnectionFactory().CreateConnection();
+            _serviceName = serviceName;
         }
 
         public async Task StartAsync()
         {
+            var exchangeName = $"ex_{_serviceName}";
+            using (var model = _connection.CreateModel())
+            {
+                model.ExchangeDeclare(exchangeName, "direct", true, false);
+            }
+
             foreach (var handler in _handlers)
             {
                 var currentModel = _models[handler.Key] = _connection.CreateModel();
                 var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, false, true);
-                currentModel.ExchangeDeclare($"ex_{handler.Key.FullName}", "fanout", true, false);
-                currentModel.QueueBind($"q_{handler.Key.FullName}", $"ex_{handler.Key.FullName}", "");
+                currentModel.QueueBind($"q_{handler.Key.FullName}", exchangeName, handler.Key.FullName);
                 var consumer = new EventingBasicConsumer(currentModel);
                 currentModel.BasicConsume($"q_{handler.Key.FullName}", true, consumer);
 

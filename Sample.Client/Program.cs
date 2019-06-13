@@ -27,7 +27,7 @@ namespace Sample.Client
             RuntimeTypeModel.Default.CompileInPlace();
             long totalTime = 0;
             int requests = 100000;
-            using (var client = new CQRSClient())
+            using (var client = new CQRSClient("HelloWorldSample"))
             {
                 List<Task<DateTime>> tasks = new List<Task<DateTime>>();
                 Stopwatch sw = new Stopwatch();

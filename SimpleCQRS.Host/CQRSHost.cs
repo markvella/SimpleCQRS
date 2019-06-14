@@ -16,22 +16,31 @@ namespace SimpleCQRS.Host
         private readonly IConnection _connection;
         private Dictionary<Type, IModel> _models = new Dictionary<Type, IModel>();
         private IModel _model;
+        private readonly string _serviceName;
+        private readonly ISerializer _serializer;
 
-        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider)
+        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider, ISerializer serializer,string serviceName)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
             _connection = new ConnectionFactory().CreateConnection();
+            _serviceName = serviceName;
+            _serializer = serializer;
         }
 
         public async Task StartAsync()
         {
+            var exchangeName = $"ex_{_serviceName}";
+            using (var model = _connection.CreateModel())
+            {
+                model.ExchangeDeclare(exchangeName, "direct", true, false);
+            }
+
             foreach (var handler in _handlers)
             {
                 var currentModel = _models[handler.Key] = _connection.CreateModel();
                 var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, false, true);
-                currentModel.ExchangeDeclare($"ex_{handler.Key.FullName}", "fanout", true, false);
-                currentModel.QueueBind($"q_{handler.Key.FullName}", $"ex_{handler.Key.FullName}", "");
+                currentModel.QueueBind($"q_{handler.Key.FullName}", exchangeName, handler.Key.FullName);
                 var consumer = new EventingBasicConsumer(currentModel);
                 currentModel.BasicConsume($"q_{handler.Key.FullName}", true, consumer);
 
@@ -52,9 +61,8 @@ namespace SimpleCQRS.Host
             var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
             var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
             var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
-            var memStream = new MemoryStream(e.Body);
             
-            var envelope = ProtoBuf.Serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), memStream);
+            var envelope = _serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), e.Body).GetAwaiter().GetResult();
             var result = service.Process(envelope);
             var message = result.GetAwaiter().GetResult();
 
@@ -62,9 +70,7 @@ namespace SimpleCQRS.Host
             Dictionary<string, object> headers = new Dictionary<string, object>();
             headers.Add("requestId", requestId);
             props.Headers = headers;
-            memStream = new MemoryStream();
-            ProtoBuf.Serializer.Serialize(memStream, message);
-            model.BasicPublish("", responseQ, props, memStream.ToArray());
+            model.BasicPublish("", responseQ, props, _serializer.Serialize(message).GetAwaiter().GetResult());
 
         }
     }

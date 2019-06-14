@@ -39,6 +39,7 @@ namespace Sample.Server
 
             var serviceProvider = new ServiceCollection();
             serviceProvider.AddTransient<IRequestHandler<HelloWorldRequest, HelloWorldResponse>, HelloWorldRequestHandler>();
+            serviceProvider.AddSingleton<ISerializer, ProtobufSerializer>();
             using (var provider = serviceProvider.BuildServiceProvider())
             {
                 await new HostBuilder()

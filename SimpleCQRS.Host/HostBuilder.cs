@@ -1,6 +1,7 @@
 ﻿using SimpleCQRS.Contracts;
 using System;
 using System.Collections.Generic;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace SimpleCQRS.Host
 {
@@ -8,12 +9,20 @@ namespace SimpleCQRS.Host
     {
         private Dictionary<Type, Type> _handlers = new Dictionary<Type, Type>();
         private IServiceProvider _serviceProvider;
+        private string _serviceName;
 
         public HostBuilder AddHandler<TRequest, TRequestHandler>() where TRequestHandler:IRequestHandler
         {
             _handlers.Add(typeof(TRequest), typeof(TRequestHandler));
             return this;
         }
+
+        public HostBuilder WithServiceName(string service)
+        {
+            _serviceName = service;
+            return this;
+        }
+        
         public HostBuilder BindServiceProvider(IServiceProvider serviceProvider)
         {
             _serviceProvider = serviceProvider;
@@ -21,7 +30,7 @@ namespace SimpleCQRS.Host
         }
         public ICQRSHost Build()
         {
-            return new CQRSHost(_handlers, _serviceProvider);
+            return new CQRSHost(_handlers, _serviceProvider, (ISerializer)_serviceProvider.GetRequiredService(typeof(ISerializer)), _serviceName);
         }
     }
 }

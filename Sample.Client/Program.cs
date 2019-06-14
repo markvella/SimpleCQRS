@@ -56,9 +56,7 @@ namespace Sample.Client
                     var task = client
                         .RequestAsync(request, cts.Token)
                         .ContinueWith(r => DateTime.UtcNow, cts.Token);
-                        
-                    //task.GetAwaiter().GetResult();
-                    
+ 
                     tasks.Add(task);
                 }
                 
@@ -74,36 +72,6 @@ namespace Sample.Client
                 }
                 Console.ReadLine();
             }
-            
-            /*
-            using (var client = new CQRSClient())
-            {
-                List<Task<DateTime>> tasks = new List<Task<DateTime>>();
-                Stopwatch sw = new Stopwatch();
-                sw.Start();
-                for (int i = 0; i < requests; i++)
-                {
-                    tasks.Add(RunTask(client));
-                }
-                var dateTimeList = Task.WhenAll<DateTime>(tasks).GetAwaiter().GetResult();
-                sw.Stop();
-                totalTime = sw.ElapsedMilliseconds;
-                Console.WriteLine($"Avg response time: {totalTime / (decimal)requests}ms");
-                var aggregate = dateTimeList
-                    .GroupBy(x => x.ToString("ddMMyyyyHHmmss"));
-                foreach (var second in aggregate)
-                {
-                    Console.WriteLine($"{second.Count()}req/s");
-                }
-                Console.ReadLine();
-            }
-            */
-        }
-
-        public static async Task<DateTime> RunTask(ICQRSClient client)
-        {
-            var response = await client.Request<HelloWorldRequest, HelloWorldResponse>(new HelloWorldRequest { Message = Guid.NewGuid().ToString() });
-            return DateTime.Now;
         }
     }
 }

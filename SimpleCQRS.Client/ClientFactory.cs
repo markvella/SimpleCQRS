@@ -10,7 +10,7 @@ namespace SimpleCQRS.Client
             var config = new ClientConfiguration();
             configure(config);
 
-            return new CQRSClientV2<TRequest, TResponse>(config);
+            return new CQRSClient<TRequest, TResponse>(config);
         }
     }
 }

@@ -1,8 +1,7 @@
-﻿using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
+﻿using System;
+using System.Threading.Tasks;
 using ProtoBuf.Meta;
 using Sample.Contracts;
-using Sample.Server.Handlers;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Host;
 using SimpleCQRS.Serializers.Json;
@@ -37,17 +36,7 @@ namespace Sample.Server
 
             await host.StartAsync();
 
-            var serviceProvider = new ServiceCollection();
-            serviceProvider.AddTransient<IRequestHandler<HelloWorldRequest, HelloWorldResponse>, HelloWorldRequestHandler>();
-            serviceProvider.AddSingleton<ISerializer, ProtobufSerializer>();
-            using (var provider = serviceProvider.BuildServiceProvider())
-            {
-                await new HostBuilder()
-                    .AddHandler<HelloWorldRequest, IRequestHandler<HelloWorldRequest, HelloWorldResponse>>()
-                    .BindServiceProvider(provider)
-                    .Build()
-                    .StartAsync();
-            }
+            Console.ReadLine();
 
             await host.StopAsync();
         }

@@ -11,7 +11,7 @@ namespace SimpleCQRS.Host
             var config = new HostConfiguration();
             configure(config);
 
-            return new CQRSHostV2(config);
+            return new CQRSHost(config);
         }
     }
 }

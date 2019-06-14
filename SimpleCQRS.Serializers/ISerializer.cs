@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace SimpleCQRS.Serializers
+﻿namespace SimpleCQRS.Serializers
 {
     public interface ISerializer
     {

@@ -1,179 +1,130 @@
-﻿using Newtonsoft.Json;
-using ProtoBuf;
-using RabbitMQ.Client;
-using SimpleCQRS.Contracts;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Text;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RabbitMQ.Client;
+using SimpleCQRS.Client.Configuration;
+using SimpleCQRS.Client.Extensions;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client
 {
-    public class CQRSClient : ICQRSClient, IDisposable
+    public sealed class CQRSClient<TRequest, TResponse> : IClient<TRequest, TResponse> 
     {
+        private readonly ClientConfiguration _config;
         private readonly IConnection _connection;
-        private readonly IModel _listenerModel;
-        private readonly IModel[] _publishers;
-        private readonly object[] _locks;
-        private readonly int _outPoolSize = 8;
-        private readonly int _inPoolSize = 1;
-        private int currentModelIdx = 0;
-        private object indexLock;
-        //private readonly CustomConsumer _consumer;
+        private readonly IModel[] _publisherModels;
+        private readonly object[] _publisherLocks;
+        private long _publisherCurrentIndex = -1;
+
         private readonly CustomConsumer[] _consumers;
-        private string[] _responseQueueName;
-
-        public CQRSClient()
+        private long _consumerCurrentIndex = -1;
+        private bool _disposed = false;
+        
+        internal CQRSClient(ClientConfiguration config)
         {
-            RabbitMQ.Client.ConnectionFactory factory = new RabbitMQ.Client.ConnectionFactory();
-            _connection = factory.CreateConnection();
-            _listenerModel = _connection.CreateModel();
+            _config = config;
+            _connection = config.CreateConnection();
+            
+            _publisherModels = new IModel[PublishingPoolSize];
+            _publisherLocks = new object[PublishingPoolSize];
+            
+            for (var i = 0; i < PublishingPoolSize; i++)
+            {
+                _publisherModels[i] = _connection.CreateModel();
+                _publisherLocks[i] = new object();
+            }
+            
+            _consumers = new CustomConsumer[ConsumingPoolSize];
+            
+            for (var i = 0; i < ConsumingPoolSize; i++)
+            {
+                var consumerModel = _connection.CreateModel();
+                var consumerQueueName = $"req_{Guid.NewGuid().ToString()}";
 
-            _publishers = new IModel[_outPoolSize];
-            _locks = new object[_outPoolSize];
-            for (int i=0;i<_outPoolSize;i++)
-            {
-                _publishers[i] = _connection.CreateModel();
-                _locks[i] = new object();
+                consumerModel.QueueDeclare(consumerQueueName, false, true, true, new Dictionary<string, object>());
+                var consumer = _consumers[i] = new CustomConsumer(consumerModel, consumerQueueName);
+                consumerModel.BasicConsume(consumerQueueName, true, consumer);
             }
-            _consumers = new CustomConsumer[_inPoolSize];
-            _responseQueueName = new string[_inPoolSize];
-            for (int i=0;i<_inPoolSize; i++)
-            {
-                _responseQueueName[i] = $"req_{Guid.NewGuid().ToString()}";
-                DeclareQueue(_responseQueueName[i]).GetAwaiter().GetResult();
-                _consumers[i] = new CustomConsumer(_listenerModel);
-                _listenerModel.BasicConsume(_responseQueueName[i], true, _consumers[i]);
-            }
-            //_model.BasicQos(0, 1, true);
         }
 
+        private string ExchangeName => $"{_config.ServiceName}.service.exchange";
+        private int PublishingPoolSize => _config.PublishingPoolSize;
+        private int ConsumingPoolSize => _config.ConsumingPoolSize;
+        private string ServiceName => _config.ServiceName;
+        private string OperationName => _config.OperationName;
+        private TimeSpan MaximumTimeout => _config.MaximumTimeout;
+        private ISerializer Serializer => _config?.Serializer;
+        
+        public async Task<TResponse> RequestAsync(TRequest request, CancellationToken ct)
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(GetType().Name);
+            }
+
+            var requestData = Serializer.Serialize(request);
+            var requestId = Guid.NewGuid().ToString();
+            
+            var publisherIndex = GetNextPublisherIndex(PublishingPoolSize);
+            var publisherModel = _publisherModels[publisherIndex];
+            var publisherLock = _publisherLocks[publisherIndex];
+
+            var consumerIndex = GetNextConsumerIndex(ConsumingPoolSize);
+            var consumer = _consumers[consumerIndex];
+
+            lock (publisherLock)
+            {
+                var props = publisherModel.CreateBasicProperties();
+                props.CorrelationId = requestId;
+                props.ReplyTo = consumer.QueueName;
+
+                consumer.AddRequest(requestId);
+             
+                publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);
+            }
+
+            var responseData = await consumer.GetResponse(requestId, MaximumTimeout, ct);
+            var response = Serializer.Deserialize<TResponse>(responseData);
+            return response;
+        }
+
+        private int GetNextPublisherIndex(int poolSize)
+        {
+            var index = Interlocked.Increment(ref _publisherCurrentIndex) % poolSize;
+            return Convert.ToInt32(index);
+        }
+        
+        private int GetNextConsumerIndex(int poolSize)
+        {
+            var index = Interlocked.Increment(ref _consumerCurrentIndex) % poolSize;
+            return Convert.ToInt32(index);
+        }
+        
         public void Dispose()
         {
-            _connection.Dispose();
-            _listenerModel.Dispose();
+            // Dispose of unmanaged resources.
+            Dispose(true);
+
+            // Suppress finalization.
+            GC.SuppressFinalize(this);
         }
 
-        private int GetNextModelIdx()
-        {
-            return currentModelIdx++ % _outPoolSize;            
-        }
-
-        public async Task<TResponse> Request<T, TResponse>(T Request)
-        {
-            var requestType = typeof(T);
-            var exchangeName = $"ex_{requestType.FullName}";
-            var requestEnvelope = new Envelope<T> { Message = Request, MessageId = Guid.NewGuid().ToString() };
-            var requestPublisherIdx = GetNextModelIdx();
-
-            var props = _listenerModel.CreateBasicProperties();
-            Dictionary<string, object> dictionary = new Dictionary<string, object>();
-
-            dictionary.Add("type", requestType.AssemblyQualifiedName);
-            dictionary.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
-            dictionary.Add("requestId", requestEnvelope.MessageId);
-            props.Headers = dictionary;
-            var req = Serialize(requestEnvelope);
-            _consumers[requestPublisherIdx%_inPoolSize].AddRequest(requestEnvelope.MessageId);
-            lock (_locks[requestPublisherIdx])
-            {
-                _publishers[requestPublisherIdx].BasicPublish(exchangeName, "", props, req);
-            }
-
-            var ary = await _consumers[requestPublisherIdx % _inPoolSize].GetResponse(requestEnvelope.MessageId);
-            var memStream = new MemoryStream(ary);
-            var response = ProtoBuf.Serializer.Deserialize<TResponse>(memStream);
-            return response;
-
-        }
-
-        private byte[] Serialize<T>(T obj)
-        {
-            using (MemoryStream stream = new MemoryStream())
-            {
-                Serializer.Serialize(stream, obj); // or SerializeWithLengthPrefix
-                return stream.ToArray();
-            }
-        }
-
-        private async Task DeclareQueue(string responseQueueName)
-        {
-            _listenerModel.QueueDeclareNoWait(responseQueueName, false, true, true, new Dictionary<string, object>());
-        }
-    }
-
-    public class ResponseObject
-    {
-        public SemaphoreSlim Semaphore { get; set; }
-        public byte[] Response { get; set; }
-    }
-
-    public class CustomConsumer : DefaultBasicConsumer, IDisposable
-    {
-        private bool _disposed = false;
-        private ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
-
-        public CustomConsumer(IModel model, string queueName = null) : base(model)
-        {
-            Model = model;
-            QueueName = queueName;
-        }
-        
-        public string QueueName { get; }
-        
-        public IModel Model { get; }
-        
-        public void AddRequest(string requestId)
-        {
-            _responses.TryAdd(requestId, new ResponseObject
-            {
-                Semaphore = new SemaphoreSlim(0, 1),
-                Response = null
-            });
-        }
-
-        public Task<byte[]> GetResponse(string requestId)
-        {
-            return GetResponse(requestId, TimeSpan.MaxValue, CancellationToken.None);
-        }
-        
-        public async Task<byte[]> GetResponse(string requestId, TimeSpan maxTimeout, CancellationToken ct)
-        {
-            var response = _responses[requestId];
-            await response.Semaphore.WaitAsync(maxTimeout, ct);
-            return response.Response;
-        }
-        
-        public override void HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
-        {
-            base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
-            var requestId = properties.CorrelationId;
-            var response = _responses[requestId];
-            response.Response = body;
-            response.Semaphore.Release();
-        }
-
-        protected virtual void Dispose(bool disposing)
+        // Protected implementation of Dispose pattern.
+        private void Dispose(bool disposing)
         {
             if (_disposed)
                 return;
 
             if (disposing)
             {
-                Model?.Dispose();
+                _connection?.Dispose();
+                _consumers?.ToList().ForEach(c => c.Dispose());
+                _publisherModels?.ToList().ForEach(p => p.Dispose());
             }
 
             _disposed = true;
-        }
-
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client.Configuration
@@ -11,7 +12,11 @@ namespace SimpleCQRS.Client.Configuration
             string username = "guest",
             string password = "guest");
 
-        IClientConfiguration UseService(string serviceName);
+        IClientConfiguration ForOperation(string serviceName, string operationName);
+
+        IClientConfiguration SetMaximumTimeout(TimeSpan timeout);
+        
+        IClientConfiguration SetPoolingSize(int publishingPoolSize, int consumingPoolSize);
         
         IClientConfiguration Using(ISerializer serializer);
     }

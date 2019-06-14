@@ -26,7 +26,12 @@ namespace Sample.Server
                 .AddOperation<HelloWorldRequest, HelloWorldResponse>("HelloWorld", (env, caller) =>
                 {
                     var message = env.Message;
-                    // Do nothing
+                    var reply = new HelloWorldResponse
+                    {
+                        Message = message?.Message
+                    };
+                    
+                    caller.SendReply(env, reply);
                 });
             });
 

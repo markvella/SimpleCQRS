@@ -1,51 +1,40 @@
 using System;
-using System.IO;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace SimpleCQRS.Serializers.Json
 {
     public class JsonSerializer : ISerializer
     {
-        private readonly Newtonsoft.Json.JsonSerializer _serializer;
-
+        private readonly Encoding _encoder = Encoding.UTF8;
+        private readonly JsonSerializerSettings _settings;
+        
         public JsonSerializer()
         {
-            _serializer = new Newtonsoft.Json.JsonSerializer
+            _settings = new JsonSerializerSettings()
             {
                 NullValueHandling = NullValueHandling.Ignore,
                 Formatting = Formatting.None
             };
         }
+
         
         public object Deserialize(byte[] data, Type targetType)
         {
-            using (var ms = new MemoryStream(data))
-            using (var sr = new StreamReader(ms))
-            using (var reader = new JsonTextReader(sr))
-            {
-                return _serializer.Deserialize(reader, targetType);
-            }
+            var json = _encoder.GetString(data);
+            return JsonConvert.DeserializeObject(json, targetType, _settings);
         }
 
         public byte[] Serialize<T>(T obj)
         {
-            using (var ms = new MemoryStream())
-            using (var sw = new StreamWriter(ms))
-            using (var writer = new JsonTextWriter(sw))
-            {
-                _serializer.Serialize(writer, obj);
-                return ms.ToArray();
-            }
+            var json = JsonConvert.SerializeObject(obj, Formatting.None, _settings);
+            return _encoder.GetBytes(json);
         }
 
         public T Deserialize<T>(byte[] data)
         {
-            using (var ms = new MemoryStream(data))
-            using (var sr = new StreamReader(ms))
-            using (var reader = new JsonTextReader(sr))
-            {
-                return _serializer.Deserialize<T>(reader);
-            }
+            var json = _encoder.GetString(data);
+            return JsonConvert.DeserializeObject<T>(json, _settings);
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts;
@@ -51,9 +52,22 @@ namespace SimpleCQRS.Host
         
         private string QueueName => $"{ServiceName}.{OperationName}.operation.queue";
 
-        public void SendReply(Envelope<TRequest> env, object reply)
+        public void SendReply(Envelope<TRequest> env, TResponse reply)
         {
-            throw new NotImplementedException();
+            lock (_lock)
+            {
+                var props = _model.CreateBasicProperties();
+                var headers = new Dictionary<string, object>();
+                //headers.Add("type", requestType.AssemblyQualifiedName);
+                //headers.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
+                //headers.Add("requestId", requestEnvelope.MessageId);
+                props.Headers = headers;
+                props.CorrelationId = env.MessageId;
+                
+                var replyData = Serializer.Serialize(reply);
+                
+                _model.BasicPublish(string.Empty, env.ReplyTo, props, replyData);
+            }
         }
         
         private void OnMessageReceived(object sender, BasicDeliverEventArgs e)
@@ -94,7 +108,8 @@ namespace SimpleCQRS.Host
             {
                 Message = message,
                 MessageId = e.BasicProperties.CorrelationId,
-                ReplyTo = e.BasicProperties.ReplyTo
+                ReplyTo = e.BasicProperties.ReplyTo,
+                RoutingKey = e.RoutingKey
             };
 
             return envelope;

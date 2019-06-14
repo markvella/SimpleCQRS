@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace SimpleCQRS
+namespace SimpleCQRS.Client
 {
     public class CQRSClient : ICQRSClient, IDisposable
     {
@@ -112,31 +112,68 @@ namespace SimpleCQRS
         public byte[] Response { get; set; }
     }
 
-    public class CustomConsumer : DefaultBasicConsumer
+    public class CustomConsumer : DefaultBasicConsumer, IDisposable
     {
-        private ConcurrentDictionary<string, ResponseObject> responses = new ConcurrentDictionary<string,ResponseObject>();
+        private bool _disposed = false;
+        private ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
+
+        public CustomConsumer(IModel model, string queueName = null) : base(model)
+        {
+            Model = model;
+            QueueName = queueName;
+        }
+        
+        public string QueueName { get; }
+        
+        public IModel Model { get; }
+        
         public void AddRequest(string requestId)
         {
-            responses.TryAdd(requestId, new ResponseObject { Semaphore = new SemaphoreSlim(0, 1), Response = null });
+            _responses.TryAdd(requestId, new ResponseObject
+            {
+                Semaphore = new SemaphoreSlim(0, 1),
+                Response = null
+            });
         }
 
-        public async Task<byte[]> GetResponse(string requestId)
+        public Task<byte[]> GetResponse(string requestId)
         {
-            var response = responses[requestId];
-            await response.Semaphore.WaitAsync();
+            return GetResponse(requestId, TimeSpan.MaxValue, CancellationToken.None);
+        }
+        
+        public async Task<byte[]> GetResponse(string requestId, TimeSpan maxTimeout, CancellationToken ct)
+        {
+            var response = _responses[requestId];
+            await response.Semaphore.WaitAsync(maxTimeout, ct);
             return response.Response;
         }
-
-        public CustomConsumer(IModel model):base(model)
-        {
-        }
+        
         public override void HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
         {
             base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
-            var requestId = Encoding.UTF8.GetString((byte[])properties.Headers["requestId"]);
-            var response = responses[requestId];
+            var requestId = properties.CorrelationId;
+            var response = _responses[requestId];
             response.Response = body;
             response.Semaphore.Release();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+            {
+                Model?.Dispose();
+            }
+
+            _disposed = true;
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
         }
     }
 }

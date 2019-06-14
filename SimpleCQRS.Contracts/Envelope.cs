@@ -19,5 +19,8 @@ namespace SimpleCQRS.Contracts
         
         [ProtoIgnore]
         public string ReplyTo { get; set; }
+        
+        [ProtoIgnore]
+        public string RoutingKey { get; set; }
     }
 }

@@ -1,8 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.2</TargetFramework>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,7 +14,7 @@
     <ProjectReference Include="..\Sample.Contracts\Sample.Contracts.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Contracts\SimpleCQRS.Contracts.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Host\SimpleCQRS.Host.csproj" />
-    <ProjectReference Include="..\SimpleCQRS.Serializers.Protobuf\SimpleCQRS.Serializers.Protobuf.csproj" />
+    <ProjectReference Include="..\SimpleCQRS.Serializers.Json\SimpleCQRS.Serializers.Json.csproj" />
   </ItemGroup>
 
 </Project>

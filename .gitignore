@@ -6,3 +6,9 @@
 /**/Debug/**
 /**/Release/**
 /*/obj/**
+/.vs/SimpleCQRS.Contracts/DesignTimeBuild/.dtbcache
+
+\.idea/
+
+*.user
+*.DS_Store

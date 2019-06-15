@@ -1,80 +1,164 @@
-﻿using RabbitMQ.Client;
-using RabbitMQ.Client.Events;
-using SimpleCQRS.Contracts;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Globalization;
+using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json;
-using System.IO;
-using System.Diagnostics;
+using RabbitMQ.Client;
+using SimpleCQRS.Host.Configuration;
+using SimpleCQRS.Host.Extensions;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
 {
-    public class CQRSHost : ICQRSHost
+    public class CQRSHost : IHost
     {
-        private readonly Dictionary<Type, Type> _handlers;
-        private readonly IServiceProvider _serviceProvider;
-        private readonly IConnection _connection;
-        private Dictionary<Type, IModel> _models = new Dictionary<Type, IModel>();
-        private IModel _model;
-        private readonly string _serviceName;
-        private readonly ISerializer _serializer;
+        private readonly HostConfiguration _config;
+        private IConnection _connection;
+        private readonly List<IDisposable> _operations;
 
-        public CQRSHost(Dictionary<Type, Type> handlers, IServiceProvider serviceProvider, ISerializer serializer,string serviceName)
+        private SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+        private bool _isStarted = false;
+        private bool _disposed = false;
+
+        internal CQRSHost(HostConfiguration config)
         {
-            _handlers = handlers;
-            _serviceProvider = serviceProvider;
-            _connection = new ConnectionFactory().CreateConnection();
-            _serviceName = serviceName;
-            _serializer = serializer;
+            _config = config;
+            _operations = new List<IDisposable>();
         }
+
+        public void Dispose()
+        {
+            // Dispose of unmanaged resources.
+            Dispose(true);
+
+            // Suppress finalization.
+            GC.SuppressFinalize(this);
+        }
+
+        // Protected implementation of Dispose pattern.
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+            {
+                DisposeOperations();
+                DisposeConnection();
+                _lock.Dispose();
+            }
+
+            _disposed = true;
+        }
+
+        private IList<OperationConfiguration> Operations => _config?.Operations;
+
+        private ISerializer Serializer => _config?.Serializer;
+        
+        private string ServiceName => _config?.ServiceName;
+        
+        private string ExchangeName => $"{_config.ServiceName}.service.exchange";
 
         public async Task StartAsync()
         {
-            var exchangeName = $"ex_{_serviceName}";
-            using (var model = _connection.CreateModel())
+            await _lock?.WaitAsync();
+
+            try
             {
-                model.ExchangeDeclare(exchangeName, "direct", true, false);
-            }
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(nameof(CQRSHost));
+                }
 
-            foreach (var handler in _handlers)
+                if (_isStarted)
+                {
+                    throw new Exception("Host already started.");
+                }
+
+                // Dispose the previous connection and operations (if any)
+                DisposeOperations();
+                DisposeConnection();
+
+                // Create a new RabbitMQ connection
+                _connection = _config.CreateConnection();
+
+                // Create the service exchange
+                using (var model = _connection.CreateModel())
+                {
+                    model.ExchangeDeclare(ExchangeName, "direct", true, false);
+                }
+
+                
+                // Create a model, queue, bindings and consumer for each operation
+                var hostOperationGenericType = typeof(HostOperation<,>);
+
+                foreach (var operation in _config.Operations)
+                {
+                    Type[] hostOperationTypeArgs = { operation.RequestType, operation.ResponseType };
+                    var hostOperationType = hostOperationGenericType.MakeGenericType(hostOperationTypeArgs);
+
+                    object[] hostOperationParams = {operation, Serializer, _connection, ExchangeName, ServiceName};
+
+                    var hostOperation = (IDisposable) Activator.CreateInstance(
+                        hostOperationType,
+                        BindingFlags.NonPublic | BindingFlags.Instance,
+                        null,
+                        hostOperationParams,
+                        CultureInfo.InvariantCulture);
+                    
+                    _operations.Add(hostOperation);
+                }
+
+                _isStarted = true;
+            }
+            finally
             {
-                var currentModel = _models[handler.Key] = _connection.CreateModel();
-                var queueResponse = currentModel.QueueDeclare($"q_{handler.Key.FullName}", false, false, true);
-                currentModel.QueueBind($"q_{handler.Key.FullName}", exchangeName, handler.Key.FullName);
-                var consumer = new EventingBasicConsumer(currentModel);
-                currentModel.BasicConsume($"q_{handler.Key.FullName}", true, consumer);
-
-                consumer.Received += Consumer_Received;
+                _lock?.Release();
             }
-            Console.ReadLine();
-
-
         }
 
-        private void Consumer_Received(object sender, BasicDeliverEventArgs e)
+        public async Task StopAsync()
         {
-            //Console.WriteLine("Message received");
-            if (Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]) == "ping")
-                return;
-            var type = Type.GetType(Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["type"]));
-            var model = _models[type];
-            var responseQ = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["responsequeue"]);
-            var requestId = Encoding.UTF8.GetString((byte[])e.BasicProperties.Headers["requestId"]);
-            var service = (BaseRequestHandler)_serviceProvider.GetService(_handlers[type]);
-            
-            var envelope = _serializer.Deserialize(typeof(Envelope<>).MakeGenericType(type), e.Body).GetAwaiter().GetResult();
-            var result = service.Process(envelope);
-            var message = result.GetAwaiter().GetResult();
+            await _lock?.WaitAsync();
 
-            var props = model.CreateBasicProperties();
-            Dictionary<string, object> headers = new Dictionary<string, object>();
-            headers.Add("requestId", requestId);
-            props.Headers = headers;
-            model.BasicPublish("", responseQ, props, _serializer.Serialize(message).GetAwaiter().GetResult());
+            try
+            {
+                if (_disposed)
+                {
+                    throw new ObjectDisposedException(nameof(CQRSHost));
+                }
 
+                if (!_isStarted)
+                {
+                    throw new Exception("Host not started.");
+                }
+
+                // Dispose the previous connection and models (if any)
+                DisposeOperations();
+                DisposeConnection();
+
+                _isStarted = false;
+            }
+            finally
+            {
+                _lock?.Release();
+            }
+        }
+
+        private void DisposeConnection()
+        {
+            _connection?.Dispose();
+        }
+
+        private void DisposeOperations()
+        {
+            foreach (var operation in _operations)
+            {
+                operation.Dispose();
+            }
+
+            _operations.Clear();
         }
     }
 }

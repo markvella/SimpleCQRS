@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SimpleCQRS.Contracts\SimpleCQRS.Contracts.csproj" />
+    <ProjectReference Include="..\SimpleCQRS.Loggers\SimpleCQRS.Loggers.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Serializers\SimpleCQRS.Serializers.csproj" />
   </ItemGroup>
 

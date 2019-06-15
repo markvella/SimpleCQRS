@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using RabbitMQ.Client;
 using SimpleCQRS.Host.Configuration;
 using SimpleCQRS.Host.Extensions;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
@@ -55,13 +56,17 @@ namespace SimpleCQRS.Host
         private IList<OperationConfiguration> Operations => _config?.Operations;
 
         private ISerializer Serializer => _config?.Serializer;
-        
+
+        private ILogger Logger => _config?.Logger;
+
         private string ServiceName => _config?.ServiceName;
         
         private string ExchangeName => $"{_config.ServiceName}.service.exchange";
 
         public async Task StartAsync()
         {
+            Logger.Log(LogLevel.Trace, "Starting CQRS host");
+
             await _lock?.WaitAsync();
 
             try
@@ -92,12 +97,21 @@ namespace SimpleCQRS.Host
                 // Create a model, queue, bindings and consumer for each operation
                 var hostOperationGenericType = typeof(HostOperation<,>);
 
+                var hostOperationSettings = new HostOperationSettings()
+                {
+                    Connection = _connection,
+                    Serializer = Serializer,
+                    Logger = Logger,
+                    ServiceName = ServiceName,
+                    ExchangeName = ExchangeName
+                };
+
                 foreach (var operation in _config.Operations)
                 {
                     Type[] hostOperationTypeArgs = { operation.RequestType, operation.ResponseType };
                     var hostOperationType = hostOperationGenericType.MakeGenericType(hostOperationTypeArgs);
 
-                    object[] hostOperationParams = {operation, Serializer, _connection, ExchangeName, ServiceName};
+                    object[] hostOperationParams = {operation, hostOperationSettings };
 
                     var hostOperation = (IDisposable) Activator.CreateInstance(
                         hostOperationType,
@@ -109,6 +123,8 @@ namespace SimpleCQRS.Host
                     _operations.Add(hostOperation);
                 }
 
+                Logger.Log(LogLevel.Trace, "Started CQRS host");
+
                 _isStarted = true;
             }
             finally
@@ -119,6 +135,8 @@ namespace SimpleCQRS.Host
 
         public async Task StopAsync()
         {
+            Logger.Log(LogLevel.Trace, "Stopping CQRS host");
+
             await _lock?.WaitAsync();
 
             try
@@ -136,6 +154,8 @@ namespace SimpleCQRS.Host
                 // Dispose the previous connection and models (if any)
                 DisposeOperations();
                 DisposeConnection();
+
+                Logger.Log(LogLevel.Trace, "Stopped CQRS host");
 
                 _isStarted = false;
             }

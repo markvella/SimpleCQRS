@@ -4,6 +4,11 @@ namespace SimpleCQRS.Loggers
 {
     public class NullLogger : ILogger
     {
+        public void Log(LogLevel logLevel, string message)
+        {
+            // Do nothing
+        }
+
         public void Log(LogLevel logLevel, string message, Exception exception)
         {
             // Do nothing

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using SimpleCQRS.Contracts;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host.Configuration
@@ -12,11 +13,13 @@ namespace SimpleCQRS.Host.Configuration
         internal List<OperationConfiguration> Operations { get; private set; }
 
         internal ISerializer Serializer { get; private set; }
-        
+        internal ILogger Logger { get; private set; }
+
         public HostConfiguration()
         {
             Operations = new List<OperationConfiguration>();
             Serializer = new NullSerializer();
+            Logger = new NullLogger();
         }
 
         public IHostConfiguration ConnectTo(
@@ -45,6 +48,12 @@ namespace SimpleCQRS.Host.Configuration
         public IHostConfiguration Using(ISerializer serializer)
         {
             Serializer = serializer;
+            return this;
+        }
+
+        public IHostConfiguration Using(ILogger logger)
+        {
+            Logger = logger;
             return this;
         }
     }

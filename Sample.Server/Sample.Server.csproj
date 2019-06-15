@@ -10,6 +10,7 @@
     <ProjectReference Include="..\Sample.Contracts\Sample.Contracts.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Contracts\SimpleCQRS.Contracts.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Host\SimpleCQRS.Host.csproj" />
+    <ProjectReference Include="..\SimpleCQRS.Loggers.Console\SimpleCQRS.Loggers.Console.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Serializers.Json\SimpleCQRS.Serializers.Json.csproj" />
   </ItemGroup>
 

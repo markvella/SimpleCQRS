@@ -18,6 +18,11 @@ namespace SimpleCQRS.Loggers.Console
                 .CreateLogger();
         }
 
+        public void Log(LogLevel logLevel, string message)
+        {
+            Log(logLevel, message, null);
+        }
+
         public void Log(LogLevel logLevel, string message, Exception exception)
         {
             if (_disposed)

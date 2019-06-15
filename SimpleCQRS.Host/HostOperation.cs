@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Host.Configuration;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
@@ -18,17 +18,15 @@ namespace SimpleCQRS.Host
 
         internal HostOperation(
             OperationConfiguration<TRequest, TResponse> operation,
-            ISerializer serializer,
-            IConnection connection,
-            string exchangeName,
-            string serviceName)
+            HostOperationSettings settings)
         {
-            ServiceName = serviceName;
-            ExchangeName = exchangeName;
-            Serializer = serializer;
+            ServiceName = settings.ServiceName;
+            ExchangeName = settings.ExchangeName;
+            Serializer = settings.Serializer;
+            Logger = settings.Logger;
 
             _operation = operation;
-            _connection = connection;
+            _connection = settings.Connection;
             _model = _connection.CreateModel();
 
             var queueName = QueueName;
@@ -41,6 +39,8 @@ namespace SimpleCQRS.Host
         }
         
         private ISerializer Serializer { get; }
+
+        private ILogger Logger { get; }
 
         private Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> MessageHandler => _operation.Handler;
 

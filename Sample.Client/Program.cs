@@ -1,14 +1,14 @@
-﻿using ProtoBuf.Meta;
-using Sample.Contracts;
-using SimpleCQRS.Contracts;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ProtoBuf.Meta;
+using Sample.Contracts;
 using SimpleCQRS.Client;
+using SimpleCQRS.Contracts;
 using SimpleCQRS.Serializers.Json;
 
 namespace Sample.Client

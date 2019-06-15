@@ -57,11 +57,6 @@ namespace SimpleCQRS.Host
             lock (_lock)
             {
                 var props = _model.CreateBasicProperties();
-                var headers = new Dictionary<string, object>();
-                //headers.Add("type", requestType.AssemblyQualifiedName);
-                //headers.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
-                //headers.Add("requestId", requestEnvelope.MessageId);
-                props.Headers = headers;
                 props.CorrelationId = env.MessageId;
                 
                 var replyData = Serializer.Serialize(reply);

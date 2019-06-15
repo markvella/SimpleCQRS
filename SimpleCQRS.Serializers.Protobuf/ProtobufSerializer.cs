@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using ProtoBuf;
 
 namespace SimpleCQRS.Serializers.Protobuf
 {
@@ -8,7 +9,7 @@ namespace SimpleCQRS.Serializers.Protobuf
         {
             using (var memStream = new MemoryStream())
             {
-                ProtoBuf.Serializer.Serialize(memStream,obj);
+                Serializer.Serialize(memStream,obj);
                 return memStream.ToArray();
             }
         }
@@ -17,7 +18,7 @@ namespace SimpleCQRS.Serializers.Protobuf
         {
             using (var memStream = new MemoryStream(data))
             {
-                return ProtoBuf.Serializer.Deserialize<T>(memStream);
+                return Serializer.Deserialize<T>(memStream);
             }
         }
     }

@@ -88,7 +88,6 @@ namespace SimpleCQRS.Host
                 {
                     model.ExchangeDeclare(ExchangeName, "direct", true, false);
                 }
-
                 
                 // Create a model, queue, bindings and consumer for each operation
                 var hostOperationGenericType = typeof(HostOperation<,>);

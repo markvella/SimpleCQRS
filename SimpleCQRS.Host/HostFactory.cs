@@ -1,5 +1,4 @@
 ﻿using System;
-using RabbitMQ.Client;
 using SimpleCQRS.Host.Configuration;
 
 namespace SimpleCQRS.Host

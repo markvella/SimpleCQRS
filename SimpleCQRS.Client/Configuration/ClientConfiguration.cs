@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using SimpleCQRS.Contracts;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client.Configuration

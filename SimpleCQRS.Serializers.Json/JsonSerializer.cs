@@ -17,7 +17,6 @@ namespace SimpleCQRS.Serializers.Json
                 Formatting = Formatting.None
             };
         }
-
         
         public object Deserialize(byte[] data, Type targetType)
         {

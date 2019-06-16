@@ -81,16 +81,16 @@ namespace SimpleCQRS.Host
                     _model.BasicAck(e.DeliveryTag, false);
                 }
             }
-            catch (Exception exception)
+            catch (Exception ex)
             {
+                Logger.Log(LogLevel.Error, "An unhandled exception occured while handing message.", ex);
+
                 lock (_lock)
                 {
                     // Acknowledge the message
                     _model.BasicNack(e.DeliveryTag, false, true);
                 }
 
-                // TODO: Add logging
-                
                 throw;
             }
         }

@@ -28,31 +28,6 @@ namespace SimpleCQRS.Host
             _operations = new List<IDisposable>();
         }
 
-        public void Dispose()
-        {
-            // Dispose of unmanaged resources.
-            Dispose(true);
-
-            // Suppress finalization.
-            GC.SuppressFinalize(this);
-        }
-
-        // Protected implementation of Dispose pattern.
-        protected virtual void Dispose(bool disposing)
-        {
-            if (_disposed)
-                return;
-
-            if (disposing)
-            {
-                DisposeOperations();
-                DisposeConnection();
-                _lock.Dispose();
-            }
-
-            _disposed = true;
-        }
-
         private IList<OperationConfiguration> Operations => _config?.Operations;
 
         private ISerializer Serializer => _config?.Serializer;
@@ -66,16 +41,16 @@ namespace SimpleCQRS.Host
         public async Task StartAsync()
         {
             Logger.Log(LogLevel.Trace, "Starting CQRS host");
-
-            await _lock?.WaitAsync();
-
+            
             try
             {
-                if (_disposed)
+                if (_lock == null || _disposed)
                 {
                     throw new ObjectDisposedException(nameof(CQRSHost));
                 }
 
+                await _lock.WaitAsync();
+                
                 if (_isStarted)
                 {
                     throw new Exception("Host already started.");
@@ -108,10 +83,19 @@ namespace SimpleCQRS.Host
 
                 foreach (var operation in _config.Operations)
                 {
-                    Type[] hostOperationTypeArgs = { operation.RequestType, operation.ResponseType };
+                    Type[] hostOperationTypeArgs =
+                    {
+                        operation.RequestType,
+                        operation.ResponseType
+                    };
+                    
                     var hostOperationType = hostOperationGenericType.MakeGenericType(hostOperationTypeArgs);
 
-                    object[] hostOperationParams = {operation, hostOperationSettings };
+                    object[] hostOperationParams =
+                    {
+                        operation,
+                        hostOperationSettings
+                    };
 
                     var hostOperation = (IDisposable) Activator.CreateInstance(
                         hostOperationType,
@@ -137,15 +121,15 @@ namespace SimpleCQRS.Host
         {
             Logger.Log(LogLevel.Trace, "Stopping CQRS host");
 
-            await _lock?.WaitAsync();
-
             try
             {
-                if (_disposed)
+                if (_lock == null || _disposed)
                 {
                     throw new ObjectDisposedException(nameof(CQRSHost));
                 }
 
+                await _lock.WaitAsync();
+                
                 if (!_isStarted)
                 {
                     throw new Exception("Host not started.");
@@ -164,7 +148,7 @@ namespace SimpleCQRS.Host
                 _lock?.Release();
             }
         }
-
+                
         private void DisposeConnection()
         {
             _connection?.Dispose();
@@ -178,6 +162,31 @@ namespace SimpleCQRS.Host
             }
 
             _operations.Clear();
+        }
+        
+        public void Dispose()
+        {
+            // Dispose of unmanaged resources.
+            Dispose(true);
+
+            // Suppress finalization.
+            GC.SuppressFinalize(this);
+        }
+
+        // Protected implementation of Dispose pattern.
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+            {
+                DisposeOperations();
+                DisposeConnection();
+                _lock.Dispose();
+            }
+
+            _disposed = true;
         }
     }
 }

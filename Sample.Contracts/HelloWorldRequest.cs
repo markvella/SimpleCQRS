@@ -1,6 +1,4 @@
 ﻿using ProtoBuf;
-using SimpleCQRS.Contracts;
-using System;
 
 namespace Sample.Contracts
 {

@@ -4,6 +4,7 @@ using ProtoBuf.Meta;
 using Sample.Contracts;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Host;
+using SimpleCQRS.Loggers.Console;
 using SimpleCQRS.Serializers.Json;
 
 namespace Sample.Server
@@ -22,6 +23,7 @@ namespace Sample.Server
                 c.SetService("SampleServer")
                 .ConnectTo()
                 .Using(new JsonSerializer())
+                .Using(new ConsoleLogger())
                 .AddOperation<HelloWorldRequest, HelloWorldResponse>("HelloWorld", (env, caller) =>
                 {
                     var message = env.Message;

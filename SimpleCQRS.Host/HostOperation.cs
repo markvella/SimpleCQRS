@@ -1,9 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Host.Configuration;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
@@ -18,17 +18,15 @@ namespace SimpleCQRS.Host
 
         internal HostOperation(
             OperationConfiguration<TRequest, TResponse> operation,
-            ISerializer serializer,
-            IConnection connection,
-            string exchangeName,
-            string serviceName)
+            HostOperationSettings settings)
         {
-            ServiceName = serviceName;
-            ExchangeName = exchangeName;
-            Serializer = serializer;
+            ServiceName = settings.ServiceName;
+            ExchangeName = settings.ExchangeName;
+            Serializer = settings.Serializer;
+            Logger = settings.Logger;
 
             _operation = operation;
-            _connection = connection;
+            _connection = settings.Connection;
             _model = _connection.CreateModel();
 
             var queueName = QueueName;
@@ -41,6 +39,8 @@ namespace SimpleCQRS.Host
         }
         
         private ISerializer Serializer { get; }
+
+        private ILogger Logger { get; }
 
         private Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> MessageHandler => _operation.Handler;
 
@@ -57,11 +57,6 @@ namespace SimpleCQRS.Host
             lock (_lock)
             {
                 var props = _model.CreateBasicProperties();
-                var headers = new Dictionary<string, object>();
-                //headers.Add("type", requestType.AssemblyQualifiedName);
-                //headers.Add("responsequeue", _responseQueueName[requestPublisherIdx%_inPoolSize]);
-                //headers.Add("requestId", requestEnvelope.MessageId);
-                props.Headers = headers;
                 props.CorrelationId = env.MessageId;
                 
                 var replyData = Serializer.Serialize(reply);
@@ -86,16 +81,16 @@ namespace SimpleCQRS.Host
                     _model.BasicAck(e.DeliveryTag, false);
                 }
             }
-            catch (Exception exception)
+            catch (Exception ex)
             {
+                Logger.Log(LogLevel.Error, "An unhandled exception occured while handing message.", ex);
+
                 lock (_lock)
                 {
                     // Acknowledge the message
                     _model.BasicNack(e.DeliveryTag, false, true);
                 }
 
-                // TODO: Add logging
-                
                 throw;
             }
         }

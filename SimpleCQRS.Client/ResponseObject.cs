@@ -2,9 +2,9 @@ using System.Threading;
 
 namespace SimpleCQRS.Client
 {
-    public class ResponseObject
+    internal class ResponseObject
     {
-        public SemaphoreSlim Semaphore { get; set; }
-        public byte[] Response { get; set; }
+        internal SemaphoreSlim Semaphore { get; set; }
+        internal byte[] Response { get; set; }
     }
 }

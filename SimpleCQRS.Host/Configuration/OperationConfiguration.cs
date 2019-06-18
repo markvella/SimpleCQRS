@@ -5,7 +5,8 @@ namespace SimpleCQRS.Host.Configuration
 {
     internal class OperationConfiguration<TRequest, TResponse> : OperationConfiguration
     {
-        internal OperationConfiguration(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler) : base(operationName, typeof(TRequest), typeof(TResponse))
+        internal OperationConfiguration(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler)
+            : base(operationName, typeof(TRequest), typeof(TResponse))
         {
             Handler = handler;
         }

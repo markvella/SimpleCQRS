@@ -6,20 +6,18 @@ using RabbitMQ.Client;
 
 namespace SimpleCQRS.Client
 {
-    public class CustomConsumer : DefaultBasicConsumer, IDisposable
+    internal class CustomConsumer : DefaultBasicConsumer, IDisposable
     {
         private bool _disposed = false;
         private ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
 
-        public CustomConsumer(IModel model, string queueName = null) : base(model)
+        internal CustomConsumer(IModel model, string queueName = null) : base(model)
         {
             Model = model;
             QueueName = queueName;
         }
         
         public string QueueName { get; }
-        
-        public IModel Model { get; }
         
         public void AddRequest(string requestId)
         {

@@ -5,14 +5,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.2.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.2" />
-    <PackageReference Include="protobuf-net" Version="2.4.0" />
     <PackageReference Include="RabbitMQ.Client" Version="5.1.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SimpleCQRS.Contracts\SimpleCQRS.Contracts.csproj" />
+    <ProjectReference Include="..\SimpleCQRS.Loggers\SimpleCQRS.Loggers.csproj" />
     <ProjectReference Include="..\SimpleCQRS.Serializers\SimpleCQRS.Serializers.csproj" />
   </ItemGroup>
 

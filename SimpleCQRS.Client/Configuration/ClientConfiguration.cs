@@ -1,6 +1,5 @@
 using System;
-using System.Collections.Generic;
-using SimpleCQRS.Contracts;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client.Configuration
@@ -14,10 +13,15 @@ namespace SimpleCQRS.Client.Configuration
         internal TimeSpan MaximumTimeout { get; private set; }
         internal int PublishingPoolSize { get; private set; }
         internal int ConsumingPoolSize { get; private set; }
+        internal ILogger Logger { get; private set; }
         
         public ClientConfiguration()
         {
             Serializer = new NullSerializer();
+            MaximumTimeout = TimeSpan.MaxValue;
+            PublishingPoolSize = 1;
+            ConsumingPoolSize = 1;
+            Logger = new NullLogger();
         }
 
         public IClientConfiguration ConnectTo(
@@ -54,6 +58,12 @@ namespace SimpleCQRS.Client.Configuration
         public IClientConfiguration Using(ISerializer serializer)
         {
             Serializer = serializer;
+            return this;
+        }
+        
+        public IClientConfiguration Using(ILogger logger)
+        {
+            Logger = logger;
             return this;
         }
     }

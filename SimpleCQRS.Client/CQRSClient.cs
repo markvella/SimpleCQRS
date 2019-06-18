@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using RabbitMQ.Client;
 using SimpleCQRS.Client.Configuration;
 using SimpleCQRS.Client.Extensions;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client
@@ -56,6 +57,7 @@ namespace SimpleCQRS.Client
         private string OperationName => _config.OperationName;
         private TimeSpan MaximumTimeout => _config.MaximumTimeout;
         private ISerializer Serializer => _config?.Serializer;
+        private ILogger Logger => _config?.Logger;
         
         public async Task<TResponse> RequestAsync(TRequest request, CancellationToken ct)
         {
@@ -64,30 +66,40 @@ namespace SimpleCQRS.Client
                 throw new ObjectDisposedException(GetType().Name);
             }
 
-            var requestData = Serializer.Serialize(request);
-            var requestId = Guid.NewGuid().ToString();
-            
-            var publisherIndex = GetNextPublisherIndex(PublishingPoolSize);
-            var publisherModel = _publisherModels[publisherIndex];
-            var publisherLock = _publisherLocks[publisherIndex];
-
-            var consumerIndex = GetNextConsumerIndex(ConsumingPoolSize);
-            var consumer = _consumers[consumerIndex];
-
-            lock (publisherLock)
+            try
             {
-                var props = publisherModel.CreateBasicProperties();
-                props.CorrelationId = requestId;
-                props.ReplyTo = consumer.QueueName;
+                var requestId = Guid.NewGuid().ToString();
+                var requestData = Serializer.Serialize(request);
+            
+                var publisherIndex = GetNextPublisherIndex(PublishingPoolSize);
+                var publisherModel = _publisherModels[publisherIndex];
+                var publisherLock = _publisherLocks[publisherIndex];
 
-                consumer.AddRequest(requestId);
+                var consumerIndex = GetNextConsumerIndex(ConsumingPoolSize);
+                var consumer = _consumers[consumerIndex];
+
+                lock (publisherLock)
+                {
+                    var props = publisherModel.CreateBasicProperties();
+                    props.CorrelationId = requestId;
+                    props.ReplyTo = consumer.QueueName;
+
+                    consumer.AddRequest(requestId);
              
-                publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);
-            }
+                    publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);
+                }
 
-            var responseData = await consumer.GetResponse(requestId, MaximumTimeout, ct);
-            var response = Serializer.Deserialize<TResponse>(responseData);
-            return response;
+                var responseData = await consumer.GetResponse(requestId, MaximumTimeout, ct);
+                var response = Serializer.Deserialize<TResponse>(responseData);
+                
+                return response;
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(LogLevel.Error, "An unhandled exception occured.", ex);
+                
+                throw;
+            }
         }
 
         private int GetNextPublisherIndex(int poolSize)

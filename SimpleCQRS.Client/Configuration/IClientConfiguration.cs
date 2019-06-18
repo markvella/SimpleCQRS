@@ -1,4 +1,5 @@
 using System;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Client.Configuration
@@ -19,5 +20,7 @@ namespace SimpleCQRS.Client.Configuration
         IClientConfiguration SetPoolingSize(int publishingPoolSize, int consumingPoolSize);
         
         IClientConfiguration Using(ISerializer serializer);
+
+        IClientConfiguration Using(ILogger logger);
     }
 }

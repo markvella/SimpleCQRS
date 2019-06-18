@@ -1,5 +1,6 @@
 ﻿using System;
 using SimpleCQRS.Contracts;
+using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host.Configuration
@@ -18,5 +19,7 @@ namespace SimpleCQRS.Host.Configuration
         IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler);
 
         IHostConfiguration Using(ISerializer serializer);
+
+        IHostConfiguration Using(ILogger logger);
     }
 }

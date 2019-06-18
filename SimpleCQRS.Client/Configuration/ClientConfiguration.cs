@@ -16,6 +16,9 @@ namespace SimpleCQRS.Client.Configuration
         public ClientConfiguration()
         {
             Serializer = new NullSerializer();
+            MaximumTimeout = TimeSpan.MaxValue;
+            PublishingPoolSize = 1;
+            ConsumingPoolSize = 1;
         }
 
         public IClientConfiguration ConnectTo(

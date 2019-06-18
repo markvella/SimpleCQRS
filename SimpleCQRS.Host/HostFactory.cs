@@ -2,6 +2,7 @@
 using System.Linq;
 using SimpleCQRS.Contracts.Exceptions;
 using SimpleCQRS.Host.Configuration;
+using SimpleCQRS.Serializers;
 
 namespace SimpleCQRS.Host
 {
@@ -29,6 +30,11 @@ namespace SimpleCQRS.Host
                     throw new SimpleCQRSException($"{nameof(o.OperationName)} must be provided.");
                 }
             });
+            
+            if (config.Serializer is NullSerializer)
+            {
+                throw new SimpleCQRSException($"A valid serializer must be provided.");
+            }
             
             return new CQRSHost(config);
         }

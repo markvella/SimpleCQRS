@@ -19,7 +19,7 @@ namespace SimpleCQRS.Client
         private readonly object[] _publisherLocks;
         private long _publisherCurrentIndex = -1;
 
-        private readonly CustomConsumer[] _consumers;
+        private readonly AsyncMessageConsumer[] _consumers;
         private long _consumerCurrentIndex = -1;
         private bool _disposed = false;
         
@@ -37,7 +37,7 @@ namespace SimpleCQRS.Client
                 _publisherLocks[i] = new object();
             }
             
-            _consumers = new CustomConsumer[ConsumingPoolSize];
+            _consumers = new AsyncMessageConsumer[ConsumingPoolSize];
             
             for (var i = 0; i < ConsumingPoolSize; i++)
             {
@@ -45,7 +45,7 @@ namespace SimpleCQRS.Client
                 var consumerQueueName = $"req_{Guid.NewGuid().ToString()}";
 
                 consumerModel.QueueDeclare(consumerQueueName, false, true, true, new Dictionary<string, object>());
-                var consumer = _consumers[i] = new CustomConsumer(consumerModel, consumerQueueName);
+                var consumer = _consumers[i] = new AsyncMessageConsumer(consumerModel, consumerQueueName);
                 consumerModel.BasicConsume(consumerQueueName, true, consumer);
             }
         }

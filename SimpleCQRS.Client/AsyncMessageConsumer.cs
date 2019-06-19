@@ -3,15 +3,17 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using SimpleCQRS.Contracts.Exceptions;
 
 namespace SimpleCQRS.Client
 {
-    internal class CustomConsumer : DefaultBasicConsumer, IDisposable
+    internal class AsyncMessageConsumer : AsyncEventingBasicConsumer, IDisposable
     {
         private bool _disposed = false;
         private ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
 
-        internal CustomConsumer(IModel model, string queueName = null) : base(model)
+        internal AsyncMessageConsumer(IModel model, string queueName = null) : base(model)
         {
             Model = model;
             QueueName = queueName;
@@ -35,16 +37,40 @@ namespace SimpleCQRS.Client
         
         public async Task<byte[]> GetResponse(string requestId, TimeSpan maxTimeout, CancellationToken ct)
         {
-            var response = _responses[requestId];
-            await response.Semaphore.WaitAsync(maxTimeout, ct);
+            _responses.TryRemove(requestId, out var response);
+
+            if (response == null)
+            {
+                throw new SimpleCQRSException("Request not found.");
+            }
+
+            var waitResult = await response.Semaphore.WaitAsync(maxTimeout, ct);
+
+            if (ct.IsCancellationRequested)
+            {
+                throw new SimpleCQRSException("Request operation cancelled.");
+            }
+        
+            if (!waitResult)
+            {
+                throw new SimpleCQRSException($"Response took longer than {maxTimeout} to respond.");    
+            }
+        
             return response.Response;
         }
         
-        public override void HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
+        public override async Task HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
         {
-            base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
+            await base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
             var requestId = properties.CorrelationId;
-            var response = _responses[requestId];
+
+            _responses.TryGetValue(requestId, out var response);
+
+            if (response == null)
+            {
+                return;
+            }
+            
             response.Response = body;
             response.Semaphore.Release();
         }

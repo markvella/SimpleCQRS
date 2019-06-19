@@ -1,4 +1,3 @@
-using System;
 using System.Text;
 using Newtonsoft.Json;
 
@@ -18,12 +17,6 @@ namespace SimpleCQRS.Serializers.Json
             };
         }
         
-        public object Deserialize(byte[] data, Type targetType)
-        {
-            var json = _encoder.GetString(data);
-            return JsonConvert.DeserializeObject(json, targetType, _settings);
-        }
-
         public byte[] Serialize<T>(T obj)
         {
             var json = JsonConvert.SerializeObject(obj, Formatting.None, _settings);
@@ -32,6 +25,9 @@ namespace SimpleCQRS.Serializers.Json
 
         public T Deserialize<T>(byte[] data)
         {
+            if (data == null)
+                return default;
+            
             var json = _encoder.GetString(data);
             return JsonConvert.DeserializeObject<T>(json, _settings);
         }

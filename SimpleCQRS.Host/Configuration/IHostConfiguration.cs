@@ -17,7 +17,7 @@ namespace SimpleCQRS.Host.Configuration
 
         IHostConfiguration SetService(string serviceName);
 
-        IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler);
+        IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler, int numberOfConsumers = 10);
 
         IHostConfiguration Using(ISerializer serializer);
 

@@ -11,5 +11,7 @@
         public string ReplyTo { get; set; }
         
         public string RoutingKey { get; set; }
+        
+        public string ConsumerTag { get; set; }
     }
 }

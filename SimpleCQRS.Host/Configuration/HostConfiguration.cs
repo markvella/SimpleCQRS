@@ -34,7 +34,7 @@ namespace SimpleCQRS.Host.Configuration
             return this;
         }
 
-        public IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler)
+        public IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler, int numberOfConsumers = 10)
         {
             Operations.Add(new OperationConfiguration<TRequest, TResponse>(operationName, handler));
             return this;

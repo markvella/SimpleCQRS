@@ -50,13 +50,8 @@ namespace Sample.Client
             DurationUnit = TimeUnit.Milliseconds,
             RateUnit = TimeUnit.Milliseconds
         };
-
-        private static readonly CounterOptions ConcurrencyCount = new CounterOptions {
-            Name = "Concurrency Count",
-            MeasurementUnit = Unit.Requests
-        };
         
-        static async Task Main(string[] args)
+        static Task Main(string[] args)
         {
             RuntimeTypeModel.Default.Add(typeof(Envelope<HelloWorldRequest>), true);
             RuntimeTypeModel.Default.Add(typeof(HelloWorldRequest), true);
@@ -72,7 +67,7 @@ namespace Sample.Client
                     .Using(Logger)
                     .ForOperation("SampleServer", "HelloWorld")
                     .SetPoolingSize(10, 10)
-                    .SetMaximumTimeout(TimeSpan.FromMilliseconds(100));
+                    .SetMaximumTimeout(TimeSpan.FromMilliseconds(50));
             });
 
             var metrics = new MetricsBuilder()
@@ -89,37 +84,31 @@ namespace Sample.Client
                 var parallelOptions = new ParallelOptions
                 {
                     CancellationToken = cts.Token,
-                    MaxDegreeOfParallelism = 20
+                    MaxDegreeOfParallelism = 30
                 };
 
                 Parallel.For(0, requests, parallelOptions, index =>
                 {
-                    try
+                    var request = new HelloWorldRequest
                     {
-                        metrics.Measure.Counter.Increment(ConcurrencyCount);
-                        
-                        var request = new HelloWorldRequest
-                        {
-                            Message = Guid.NewGuid().ToString()
-                        };
+                        Message = Guid.NewGuid().ToString()
+                    };
 
-                        using (metrics.Measure.Timer.Time(RequestTimer))
-                        {
-                            client
-                                .RequestAsync(request, cts.Token)
-                                .ContinueWith(r => HandleResponse(r, request, metrics), cts.Token)
-                                .GetAwaiter()
-                                .GetResult();
-                        }
-                    }
-                    finally
+                    using (metrics.Measure.Timer.Time(RequestTimer))
                     {
-                        metrics.Measure.Counter.Decrement(ConcurrencyCount);
+                        client
+                            .RequestAsync(request, cts.Token)
+                            .ContinueWith(r => HandleResponse(r, request, metrics), cts.Token)
+                            .ConfigureAwait(false)
+                            .GetAwaiter()
+                            .GetResult();
                     }
                 });
             }
             
             Task.WaitAll(metrics.ReportRunner.RunAllAsync().ToArray());
+            
+            return Task.CompletedTask;
         }
 
         private static void HandleResponse(Task<HelloWorldResponse> task, HelloWorldRequest request, IMetricsRoot metrics)

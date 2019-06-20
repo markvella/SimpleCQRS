@@ -15,6 +15,8 @@ namespace SimpleCQRS.Client.Configuration
 
         IClientConfiguration ForOperation(string serviceName, string operationName);
 
+        IClientConfiguration SetRetries(int retries);
+        
         IClientConfiguration SetMaximumTimeout(TimeSpan timeout);
         
         IClientConfiguration SetPoolingSize(int publishingPoolSize, int consumingPoolSize);

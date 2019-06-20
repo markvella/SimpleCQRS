@@ -5,17 +5,20 @@ using System.Threading.Tasks;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts.Exceptions;
+using SimpleCQRS.Loggers;
 
 namespace SimpleCQRS.Client
 {
     internal class AsyncMessageConsumer : AsyncEventingBasicConsumer, IDisposable
     {
         private bool _disposed = false;
-        private ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
+        private readonly ILogger Logger;
+        private readonly ConcurrentDictionary<string, ResponseObject> _responses = new ConcurrentDictionary<string,ResponseObject>();
 
-        internal AsyncMessageConsumer(IModel model, string queueName = null) : base(model)
+        internal AsyncMessageConsumer(IModel model, ILogger logger, string queueName = null) : base(model)
         {
             Model = model;
+            Logger = logger;
             QueueName = queueName;
         }
         
@@ -37,42 +40,53 @@ namespace SimpleCQRS.Client
         
         public async Task<byte[]> GetResponse(string requestId, TimeSpan maxTimeout, CancellationToken ct)
         {
-            _responses.TryRemove(requestId, out var response);
-
-            if (response == null)
+            try
             {
-                throw new SimpleCQRSException("Request not found.");
-            }
+                _responses.TryGetValue(requestId, out var response);
 
-            var waitResult = await response.Semaphore.WaitAsync(maxTimeout, ct);
+                if (response == null)
+                {
+                    throw new SimpleCQRSException("Request not found.");
+                }
 
-            if (ct.IsCancellationRequested)
-            {
-                throw new SimpleCQRSException("Request operation cancelled.");
-            }
+                var waitResult = await response.Semaphore.WaitAsync(maxTimeout, ct);
+
+                if (ct.IsCancellationRequested)
+                {
+                    throw new SimpleCQRSException("Request operation cancelled.");
+                }
         
-            if (!waitResult)
-            {
-                throw new SimpleCQRSException($"Response took longer than {maxTimeout} to respond.");    
-            }
+                if (!waitResult)
+                {
+                    throw new SimpleCQRSException($"Response took longer than {maxTimeout} to respond.");    
+                }
         
-            return response.Response;
+                return response.Response;
+            }
+            finally
+            {
+                _responses.TryRemove(requestId, out var response);
+            }
         }
         
-        public override async Task HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
+        public override Task HandleBasicDeliver(string consumerTag, ulong deliveryTag, bool redelivered, string exchange, string routingKey, IBasicProperties properties, byte[] body)
         {
-            await base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
+            //await base.HandleBasicDeliver(consumerTag, deliveryTag, redelivered, exchange, routingKey, properties, body);
             var requestId = properties.CorrelationId;
 
             _responses.TryGetValue(requestId, out var response);
 
             if (response == null)
             {
-                return;
+                Logger.Log(LogLevel.Warning, $"Request not found for key {requestId}");
             }
-            
-            response.Response = body;
-            response.Semaphore.Release();
+            else
+            {
+                response.Response = body;
+                response.Semaphore.Release();
+            }
+
+            return Task.CompletedTask;
         }
 
         protected virtual void Dispose(bool disposing)

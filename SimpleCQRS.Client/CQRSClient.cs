@@ -45,7 +45,7 @@ namespace SimpleCQRS.Client
                 var consumerQueueName = $"req_{Guid.NewGuid().ToString()}";
 
                 consumerModel.QueueDeclare(consumerQueueName, false, true, true, new Dictionary<string, object>());
-                var consumer = _consumers[i] = new AsyncMessageConsumer(consumerModel, consumerQueueName);
+                var consumer = _consumers[i] = new AsyncMessageConsumer(consumerModel, Logger, consumerQueueName);
                 consumerModel.BasicConsume(consumerQueueName, true, consumer);
             }
         }

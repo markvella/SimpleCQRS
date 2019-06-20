@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts;
@@ -33,7 +34,7 @@ namespace SimpleCQRS.Host
             _model.QueueDeclare(queueName, true, false, false);
             _model.QueueBind(queueName, ExchangeName, operation.OperationName);
 
-            var consumer = new EventingBasicConsumer(_model);
+            var consumer = new AsyncEventingBasicConsumer(_model);
             _model.BasicConsume(queueName, false, consumer);
             consumer.Received += OnMessageReceived;
         }
@@ -42,7 +43,7 @@ namespace SimpleCQRS.Host
 
         private ILogger Logger { get; }
 
-        private Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> MessageHandler => _operation.Handler;
+        private Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> MessageHandler => _operation.Handler;
 
         private string ServiceName { get; }
         
@@ -65,7 +66,7 @@ namespace SimpleCQRS.Host
             }
         }
         
-        private void OnMessageReceived(object sender, BasicDeliverEventArgs e)
+        private async Task OnMessageReceived(object sender, BasicDeliverEventArgs e)
         {
             try
             {
@@ -73,7 +74,7 @@ namespace SimpleCQRS.Host
 
                 // Execute the message handler within the lock to ensure
                 // the reply is safely done on the same IModel
-                MessageHandler(envelope, this);
+                await MessageHandler(envelope, this);
                 
                 lock (_lock)
                 {

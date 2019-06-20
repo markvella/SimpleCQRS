@@ -46,6 +46,8 @@ namespace Sample.Server
                     };
                     
                     caller.SendReply(env, reply);
+
+                    return Task.CompletedTask;
                 });
             });
 

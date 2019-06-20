@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
@@ -16,7 +17,7 @@ namespace SimpleCQRS.Host.Configuration
 
         IHostConfiguration SetService(string serviceName);
 
-        IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler);
+        IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler);
 
         IHostConfiguration Using(ISerializer serializer);
 

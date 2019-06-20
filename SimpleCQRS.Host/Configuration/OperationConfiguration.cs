@@ -1,17 +1,18 @@
 ﻿using System;
+using System.Threading.Tasks;
 using SimpleCQRS.Contracts;
 
 namespace SimpleCQRS.Host.Configuration
 {
     internal class OperationConfiguration<TRequest, TResponse> : OperationConfiguration
     {
-        internal OperationConfiguration(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler)
+        internal OperationConfiguration(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler)
             : base(operationName, typeof(TRequest), typeof(TResponse))
         {
             Handler = handler;
         }
         
-        internal Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> Handler { get; }
+        internal Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> Handler { get; }
     }
     
     internal class OperationConfiguration

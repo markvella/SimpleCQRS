@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
@@ -33,7 +34,7 @@ namespace SimpleCQRS.Host.Configuration
             return this;
         }
 
-        public IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> handler)
+        public IHostConfiguration AddOperation<TRequest, TResponse>(string operationName, Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> handler)
         {
             Operations.Add(new OperationConfiguration<TRequest, TResponse>(operationName, handler));
             return this;

@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using App.Metrics;
 using App.Metrics.Counter;
 using App.Metrics.Formatters.Json;
+using App.Metrics.Gauge;
+using App.Metrics.Timer;
 using ProtoBuf.Meta;
 using Sample.Contracts;
 using SimpleCQRS.Client;
@@ -20,7 +22,39 @@ namespace Sample.Client
 {
     class Program
     {
-        public static ConcurrentBag<DateTime> timeStamps = new ConcurrentBag<DateTime>();
+        private static readonly ILogger Logger = new ConsoleLogger();
+
+        private static readonly CounterOptions SentRequestsCount = new CounterOptions {
+            Name = "Sent Requests",
+            MeasurementUnit = Unit.Calls
+        };
+            
+        private static readonly CounterOptions FailedRequestsCount = new CounterOptions {
+            Name = "Failed Requests",
+            MeasurementUnit = Unit.Calls
+        };
+            
+        private static readonly CounterOptions SuccessfulRequestsCount = new CounterOptions {
+            Name = "Successful Requests",
+            MeasurementUnit = Unit.Calls
+        };
+            
+        private static readonly CounterOptions ApplicationErrorCount = new CounterOptions {
+            Name = "Application Errors",
+            MeasurementUnit = Unit.Calls
+        };
+        
+        private static readonly TimerOptions RequestTimer = new TimerOptions {
+            Name = "Request Timer",
+            MeasurementUnit = Unit.Requests,
+            DurationUnit = TimeUnit.Milliseconds,
+            RateUnit = TimeUnit.Milliseconds
+        };
+
+        private static readonly CounterOptions ConcurrencyCount = new CounterOptions {
+            Name = "Concurrency Count",
+            MeasurementUnit = Unit.Requests
+        };
         
         static async Task Main(string[] args)
         {
@@ -29,18 +63,16 @@ namespace Sample.Client
             RuntimeTypeModel.Default.Add(typeof(HelloWorldResponse), true);
             RuntimeTypeModel.Default.CompileInPlace();
             
-            var totalTime = 0L;
             var requests = 100000;
-            var logger = new ConsoleLogger();
             
             var client = ClientFactory.Create<HelloWorldRequest, HelloWorldResponse>(c =>
             {
                 c.ConnectTo()
                     .Using(new JsonSerializer())
-                    .Using(logger)
+                    .Using(Logger)
                     .ForOperation("SampleServer", "HelloWorld")
                     .SetPoolingSize(10, 10)
-                    .SetMaximumTimeout(TimeSpan.FromSeconds(60));
+                    .SetMaximumTimeout(TimeSpan.FromMilliseconds(100));
             });
 
             var metrics = new MetricsBuilder()
@@ -51,99 +83,77 @@ namespace Sample.Client
                 })
                 .Build();
             
-            var sentRequestsCount = new CounterOptions
-            {
-                Name = "Sent Requests",
-                MeasurementUnit = Unit.Calls
-            };
-            
-            var failedRequestsCount = new CounterOptions
-            {
-                Name = "Failed Requests",
-                MeasurementUnit = Unit.Calls
-            };
-            
-            var successfulRequestsCount = new CounterOptions
-            {
-                Name = "Successful Requests",
-                MeasurementUnit = Unit.Calls
-            };
-            
-            var applicationErrorCount = new CounterOptions
-            {
-                Name = "Application Errors",
-                MeasurementUnit = Unit.Calls
-            };
-            
             using (client)
             {
                 var cts = new CancellationTokenSource();
-                var tasks = new List<Task<DateTime>>();
-                var sw = new Stopwatch();
-                sw.Start();
-                
-                for (var i = 0; i < requests; i++)
+                var parallelOptions = new ParallelOptions
                 {
-                    var request = new HelloWorldRequest
+                    CancellationToken = cts.Token,
+                    MaxDegreeOfParallelism = 20
+                };
+
+                Parallel.For(0, requests, parallelOptions, index =>
+                {
+                    try
                     {
-                        Message = Guid.NewGuid().ToString()
-                    };
-
-                    var task = client
-                        .RequestAsync(request, cts.Token)
-                        .ContinueWith(r =>
+                        metrics.Measure.Counter.Increment(ConcurrencyCount);
+                        
+                        var request = new HelloWorldRequest
                         {
-                            metrics.Measure.Counter.Increment(sentRequestsCount);
+                            Message = Guid.NewGuid().ToString()
+                        };
 
-                            if (r.IsFaulted)
-                            {
-                                metrics.Measure.Counter.Increment(failedRequestsCount);
-
-                                if (r.Exception != null)
-                                {
-                                    logger.Log(LogLevel.Error, r.Exception.Message, r.Exception);
-                                }
-                            }
-                            else if (r.IsCompletedSuccessfully)
-                            {
-                                metrics.Measure.Counter.Increment(successfulRequestsCount);
-
-                                var response = r.Result;
-
-                                if (response == null)
-                                {
-                                    metrics.Measure.Counter.Increment(applicationErrorCount, "null-response");
-                                }
-                                else if (string.IsNullOrEmpty(response.Message))
-                                {
-                                    metrics.Measure.Counter.Increment(applicationErrorCount, "empty-message");
-                                }
-                                else if (response.Message.Equals(request.Message) == false)
-                                {
-                                    metrics.Measure.Counter.Increment(applicationErrorCount, "non-matching-message");
-                                }
-                            }
-                            
-                        }, cts.Token)
-                        .ContinueWith(r => DateTime.UtcNow, cts.Token);
- 
-                    tasks.Add(task);
-                }
-                
-                var dateTimeList = Task.WhenAll(tasks).GetAwaiter().GetResult();
-                sw.Stop();
-                totalTime = sw.ElapsedMilliseconds;
-                Console.WriteLine($"Avg response time: {totalTime / (decimal)requests}ms");
-                var aggregate = dateTimeList
-                    .GroupBy(x => x.ToString("ddMMyyyyHHmmss"));
-                
-                foreach (var second in aggregate)
-                {
-                    Console.WriteLine($"{second.Count()}req/s");
-                }
+                        using (metrics.Measure.Timer.Time(RequestTimer))
+                        {
+                            client
+                                .RequestAsync(request, cts.Token)
+                                .ContinueWith(r => HandleResponse(r, request, metrics), cts.Token)
+                                .GetAwaiter()
+                                .GetResult();
+                        }
+                    }
+                    finally
+                    {
+                        metrics.Measure.Counter.Decrement(ConcurrencyCount);
+                    }
+                });
             }
             
             Task.WaitAll(metrics.ReportRunner.RunAllAsync().ToArray());
+        }
+
+        private static void HandleResponse(Task<HelloWorldResponse> task, HelloWorldRequest request, IMetricsRoot metrics)
+        {
+            metrics.Measure.Counter.Increment(SentRequestsCount);
+
+            if (task.IsFaulted)
+            {
+                metrics.Measure.Counter.Increment(FailedRequestsCount);
+
+                if (task.Exception != null)
+                {
+                    Logger.Log(LogLevel.Error, task.Exception.Message, task.Exception);
+                }
+            }
+            else if (task.IsCompletedSuccessfully)
+            {
+                metrics.Measure.Counter.Increment(SuccessfulRequestsCount);
+
+                var response = task.Result;
+
+                if (response == null)
+                {
+                    metrics.Measure.Counter.Increment(ApplicationErrorCount, "null-response");
+                }
+                else if (string.IsNullOrEmpty(response.Message))
+                {
+                    metrics.Measure.Counter.Increment(ApplicationErrorCount, "empty-message");
+                }
+                else if (response.Message.Equals(request.Message) == false)
+                {
+                    metrics.Measure.Counter.Increment(ApplicationErrorCount, "non-matching-message");
+                }
+            }
         }
     }
 }

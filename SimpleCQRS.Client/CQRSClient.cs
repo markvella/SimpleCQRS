@@ -81,6 +81,7 @@ namespace SimpleCQRS.Client
                 lock (publisherLock)
                 {
                     var props = publisherModel.CreateBasicProperties();
+                    props.Persistent = false;
                     props.CorrelationId = requestId;
                     props.ReplyTo = consumer.QueueName;
 

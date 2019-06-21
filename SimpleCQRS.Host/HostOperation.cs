@@ -79,7 +79,15 @@ namespace SimpleCQRS.Host
         {
             using (var model = _connection.CreateModel())
             {
-                model.QueueDeclare(QueueName, true, false, false);
+                var queueOptionalArguments = new Dictionary<string, object>
+                {
+                    // Add the x-max-priority header to support message priority ordering
+                    {
+                        "x-max-priority", 255
+                    }
+                };
+                
+                model.QueueDeclare(QueueName, false, false, false, queueOptionalArguments);
                 model.QueueBind(QueueName, ExchangeName, OperationName);
             }
         }

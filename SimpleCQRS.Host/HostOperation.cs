@@ -100,6 +100,7 @@ namespace SimpleCQRS.Host
                 {
                     var props = hostModel.Model.CreateBasicProperties();
                     props.CorrelationId = env.MessageId;
+                    props.Headers = env.Headers;
                 
                     var replyData = Serializer.Serialize(reply);
                 
@@ -135,7 +136,8 @@ namespace SimpleCQRS.Host
                 MessageId = e.BasicProperties.CorrelationId,
                 ReplyTo = e.BasicProperties.ReplyTo,
                 RoutingKey = e.RoutingKey,
-                ConsumerTag = e.ConsumerTag
+                ConsumerTag = e.ConsumerTag,
+                Headers = e.BasicProperties?.Headers
             };
 
             return envelope;

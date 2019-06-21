@@ -10,9 +10,11 @@ using App.Metrics.Counter;
 using App.Metrics.Formatters.Json;
 using App.Metrics.Gauge;
 using App.Metrics.Timer;
+using Polly;
 using ProtoBuf.Meta;
 using Sample.Contracts;
 using SimpleCQRS.Client;
+using SimpleCQRS.Client.Enumerations;
 using SimpleCQRS.Contracts;
 using SimpleCQRS.Loggers;
 using SimpleCQRS.Loggers.Console;
@@ -98,7 +100,11 @@ namespace Sample.Client
                     using (metrics.Measure.Timer.Time(RequestTimer))
                     {
                         client
-                            .RequestAsync(request, cts.Token)
+                            .RequestAsync(request, cts.Token, Priority.Normal, m =>
+                            {
+                                m.AddHeader("test", "123")
+                                 .AddHeader("test2", 123);
+                            })
                             .ContinueWith(r => HandleResponse(r, request, metrics), cts.Token)
                             .ConfigureAwait(false)
                             .GetAwaiter()

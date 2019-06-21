@@ -72,7 +72,11 @@ namespace SimpleCQRS.Client
         private ILogger Logger => _config.Logger;
         private int Retries => _config.Retries;
         
-        public Task<TResponse> RequestAsync(TRequest request, CancellationToken ct, Priority priority = Priority.Normal)
+        public Task<TResponse> RequestAsync(
+            TRequest request,
+            CancellationToken ct,
+            Priority priority = Priority.Normal,
+            Action<IRequestEnhancer> requestEnhancer = null)
         {
             if (_disposed)
             {
@@ -100,6 +104,9 @@ namespace SimpleCQRS.Client
                         props.CorrelationId = requestId;
                         props.ReplyTo = consumer.QueueName;
                         props.Priority = priority.GetValue();
+                        
+                        requestEnhancer?.Invoke(new RequestEnhancer(props));
+                        
                         consumer.AddRequest(requestId);
              
                         publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);

@@ -7,6 +7,10 @@ namespace SimpleCQRS.Client
 {
     public interface IClient<in TRequest, TResponse> : IDisposable
     {
-        Task<TResponse> RequestAsync(TRequest request, CancellationToken ct, Priority priority = Priority.Normal);
+        Task<TResponse> RequestAsync(
+            TRequest request,
+            CancellationToken ct,
+            Priority priority = Priority.Normal,
+            Action<IRequestEnhancer> requestEnhancer = null);
     }
 }

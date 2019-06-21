@@ -67,6 +67,7 @@ namespace Sample.Client
                     .Using(Logger)
                     .ForOperation("SampleServer", "HelloWorld")
                     .SetPoolingSize(10, 10)
+                    .SetRetries(3)
                     .SetMaximumTimeout(TimeSpan.FromMilliseconds(50));
             });
 

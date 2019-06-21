@@ -7,6 +7,7 @@ using Polly;
 using Polly.Retry;
 using RabbitMQ.Client;
 using SimpleCQRS.Client.Configuration;
+using SimpleCQRS.Client.Enumerations;
 using SimpleCQRS.Client.Exceptions;
 using SimpleCQRS.Client.Extensions;
 using SimpleCQRS.Loggers;
@@ -71,7 +72,7 @@ namespace SimpleCQRS.Client
         private ILogger Logger => _config.Logger;
         private int Retries => _config.Retries;
         
-        public Task<TResponse> RequestAsync(TRequest request, CancellationToken ct)
+        public Task<TResponse> RequestAsync(TRequest request, CancellationToken ct, Priority priority = Priority.Normal)
         {
             if (_disposed)
             {
@@ -98,7 +99,7 @@ namespace SimpleCQRS.Client
                         props.Persistent = false;
                         props.CorrelationId = requestId;
                         props.ReplyTo = consumer.QueueName;
-
+                        props.Priority = priority.GetValue();
                         consumer.AddRequest(requestId);
              
                         publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);

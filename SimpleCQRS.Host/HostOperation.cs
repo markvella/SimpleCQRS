@@ -83,7 +83,7 @@ namespace SimpleCQRS.Host
                 {
                     // Add the x-max-priority header to support message priority ordering
                     {
-                        "x-max-priority", 255
+                        "x-max-priority", 10
                     }
                 };
                 

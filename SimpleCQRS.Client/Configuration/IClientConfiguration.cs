@@ -7,7 +7,7 @@ namespace SimpleCQRS.Client.Configuration
     public interface IClientConfiguration
     {
         IClientConfiguration ConnectTo(
-            string hostName = "localhost",
+            string hostName = "rabbitmq",
             int port = 5672,
             string virtualHost = "/",
             string username = "guest",

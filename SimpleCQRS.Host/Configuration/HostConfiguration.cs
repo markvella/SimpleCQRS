@@ -23,7 +23,7 @@ namespace SimpleCQRS.Host.Configuration
         }
 
         public IHostConfiguration ConnectTo(
-            string hostName = "localhost",
+            string hostName = "rabbitmq",
             int port = 5672,
             string virtualHost = "/",
             string username = "guest",

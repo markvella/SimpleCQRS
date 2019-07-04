@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.271
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29020.237
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Contracts", "SimpleCQRS.Contracts\SimpleCQRS.Contracts.csproj", "{8F57DF5E-156A-472A-8247-AC165743CF27}"
 EndProject
@@ -23,9 +23,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Serializers.Json
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Serializers.Protobuf", "SimpleCQRS.Serializers.Protobuf\SimpleCQRS.Serializers.Protobuf.csproj", "{E961CD57-E6AC-4334-8DF0-F22198D68F70}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleCQRS.Loggers", "SimpleCQRS.Loggers\SimpleCQRS.Loggers.csproj", "{43B7D84F-71F4-4562-BE1C-8B7D1C8FB8F0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Loggers", "SimpleCQRS.Loggers\SimpleCQRS.Loggers.csproj", "{43B7D84F-71F4-4562-BE1C-8B7D1C8FB8F0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleCQRS.Loggers.Console", "SimpleCQRS.Loggers.Console\SimpleCQRS.Loggers.Console.csproj", "{DF4891B0-7578-4CE3-B310-F83D8685C24B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SimpleCQRS.Loggers.Console", "SimpleCQRS.Loggers.Console\SimpleCQRS.Loggers.Console.csproj", "{DF4891B0-7578-4CE3-B310-F83D8685C24B}"
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{378D399A-839D-4E80-AED0-D2F3C3EBA8EA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -77,6 +79,10 @@ Global
 		{DF4891B0-7578-4CE3-B310-F83D8685C24B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DF4891B0-7578-4CE3-B310-F83D8685C24B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DF4891B0-7578-4CE3-B310-F83D8685C24B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{378D399A-839D-4E80-AED0-D2F3C3EBA8EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{378D399A-839D-4E80-AED0-D2F3C3EBA8EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{378D399A-839D-4E80-AED0-D2F3C3EBA8EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{378D399A-839D-4E80-AED0-D2F3C3EBA8EA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using ProtoBuf.Meta;
 using Sample.Contracts;
@@ -38,7 +39,7 @@ namespace Sample.Server
 
             await host.StartAsync();
 
-            Console.ReadLine();
+            Thread.Sleep(Timeout.Infinite);
 
             await host.StopAsync();
         }

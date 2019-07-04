@@ -14,7 +14,7 @@ namespace SimpleCQRS.Client.Configuration
         internal int PublishingPoolSize { get; private set; }
         internal int ConsumingPoolSize { get; private set; }
         internal ILogger Logger { get; private set; }
-        
+
         public ClientConfiguration()
         {
             Serializer = new NullSerializer();
@@ -25,7 +25,7 @@ namespace SimpleCQRS.Client.Configuration
         }
 
         public IClientConfiguration ConnectTo(
-            string hostName = "localhost",
+            string hostName = "rabbitmq",
             int port = 5672,
             string virtualHost = "/",
             string username = "guest",
@@ -54,13 +54,13 @@ namespace SimpleCQRS.Client.Configuration
             ConsumingPoolSize = consumingPoolSize;
             return this;
         }
-        
+
         public IClientConfiguration Using(ISerializer serializer)
         {
             Serializer = serializer;
             return this;
         }
-        
+
         public IClientConfiguration Using(ILogger logger)
         {
             Logger = logger;

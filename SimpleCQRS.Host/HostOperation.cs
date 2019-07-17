@@ -1,4 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SimpleCQRS.Contracts;
@@ -12,10 +15,9 @@ namespace SimpleCQRS.Host
     {
         private readonly OperationConfiguration<TRequest, TResponse> _operation;
         private readonly IConnection _connection;
-        private readonly IModel _model;
         private bool _disposed = false;
-        private readonly object _lock = new object();
-
+        private readonly Dictionary<string, HostModel> _models;
+        
         internal HostOperation(
             OperationConfiguration<TRequest, TResponse> operation,
             HostOperationSettings settings)
@@ -27,22 +29,41 @@ namespace SimpleCQRS.Host
 
             _operation = operation;
             _connection = settings.Connection;
-            _model = _connection.CreateModel();
+            _models = new Dictionary<string, HostModel>();
 
-            var queueName = QueueName;
-            _model.QueueDeclare(queueName, true, false, false);
-            _model.QueueBind(queueName, ExchangeName, operation.OperationName);
+            CreateQueue();
 
-            var consumer = new EventingBasicConsumer(_model);
-            _model.BasicConsume(queueName, false, consumer);
-            consumer.Received += OnMessageReceived;
+            for (var i = 0; i < NumberOfConsumers; i++)
+            {
+                var model = _connection.CreateModel();
+            
+                var consumer = new AsyncEventingBasicConsumer(model);
+                var consumerTag = model.BasicConsume(QueueName, true, consumer);
+                consumer.Received += OnMessageReceived;
+                
+                _models.Add(consumerTag, new HostModel(model, consumerTag));
+            }
+        }
+
+        private class HostModel
+        {
+            internal HostModel(IModel model, string consumerTag)
+            {
+                Model = model;
+                ConsumerTag = consumerTag;
+                Lock = new object();
+            }
+
+            internal IModel Model { get; }
+            internal object Lock { get; }
+            internal string ConsumerTag { get; }
         }
         
         private ISerializer Serializer { get; }
 
         private ILogger Logger { get; }
 
-        private Action<Envelope<TRequest>, IHostOperation<TRequest, TResponse>> MessageHandler => _operation.Handler;
+        private Func<Envelope<TRequest>, IHostOperation<TRequest, TResponse>, Task> MessageHandler => _operation.Handler;
 
         private string ServiceName { get; }
         
@@ -52,45 +73,55 @@ namespace SimpleCQRS.Host
         
         private string QueueName => $"{ServiceName}.{OperationName}.operation.queue";
 
-        public void SendReply(Envelope<TRequest> env, TResponse reply)
+        private int NumberOfConsumers => _operation.NumberofOfConsumers;
+        
+        private void CreateQueue()
         {
-            lock (_lock)
+            using (var model = _connection.CreateModel())
             {
-                var props = _model.CreateBasicProperties();
-                props.CorrelationId = env.MessageId;
+                var queueOptionalArguments = new Dictionary<string, object>
+                {
+                    // Add the x-max-priority header to support message priority ordering
+                    {
+                        "x-max-priority", 10
+                    }
+                };
                 
-                var replyData = Serializer.Serialize(reply);
-                
-                _model.BasicPublish(string.Empty, env.ReplyTo, props, replyData);
+                model.QueueDeclare(QueueName, false, false, false, queueOptionalArguments);
+                model.QueueBind(QueueName, ExchangeName, OperationName);
             }
         }
         
-        private void OnMessageReceived(object sender, BasicDeliverEventArgs e)
+        public void SendReply(Envelope<TRequest> env, TResponse reply)
+        {
+            if (_models.TryGetValue(env.ConsumerTag, out var hostModel))
+            {
+                lock (hostModel.Lock)
+                {
+                    var props = hostModel.Model.CreateBasicProperties();
+                    props.CorrelationId = env.MessageId;
+                    props.Headers = env.Headers;
+                
+                    var replyData = Serializer.Serialize(reply);
+                
+                    hostModel.Model.BasicPublish(string.Empty, env.ReplyTo, props, replyData);
+                }
+            }
+        }
+        
+        private async Task OnMessageReceived(object sender, BasicDeliverEventArgs e)
         {
             try
             {
                 var envelope = ParseMessage(e);
 
-                // Execute the message handler within the lock to ensure
-                // the reply is safely done on the same IModel
-                MessageHandler(envelope, this);
-                
-                lock (_lock)
-                {
-                    // Acknowledge the message
-                    _model.BasicAck(e.DeliveryTag, false);
-                }
+                // Execute the message handler
+                await MessageHandler(envelope, this);
             }
             catch (Exception ex)
             {
                 Logger.Log(LogLevel.Error, "An unhandled exception occured while handing message.", ex);
-
-                lock (_lock)
-                {
-                    // Acknowledge the message
-                    _model.BasicNack(e.DeliveryTag, false, true);
-                }
-
+                
                 throw;
             }
         }
@@ -104,7 +135,9 @@ namespace SimpleCQRS.Host
                 Message = message,
                 MessageId = e.BasicProperties.CorrelationId,
                 ReplyTo = e.BasicProperties.ReplyTo,
-                RoutingKey = e.RoutingKey
+                RoutingKey = e.RoutingKey,
+                ConsumerTag = e.ConsumerTag,
+                Headers = e.BasicProperties?.Headers
             };
 
             return envelope;
@@ -127,11 +160,8 @@ namespace SimpleCQRS.Host
 
             if (disposing)
             {
-                lock (_lock)
-                {
-                    _model?.Dispose();
-                    _connection?.Dispose();
-                }
+                _models.Values.ToList().ForEach(m => m.Model?.Dispose());
+                _connection?.Dispose();
             }
 
             _disposed = true;

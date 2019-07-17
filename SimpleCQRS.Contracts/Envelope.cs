@@ -1,4 +1,6 @@
-﻿namespace SimpleCQRS.Contracts
+﻿using System.Collections.Generic;
+
+namespace SimpleCQRS.Contracts
 {
     public class Envelope<T>
     {
@@ -11,5 +13,9 @@
         public string ReplyTo { get; set; }
         
         public string RoutingKey { get; set; }
+        
+        public string ConsumerTag { get; set; }
+        
+        public IDictionary<string, object> Headers { get; set; }
     }
 }

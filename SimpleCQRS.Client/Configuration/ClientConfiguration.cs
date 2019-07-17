@@ -10,6 +10,7 @@ namespace SimpleCQRS.Client.Configuration
         internal string OperationName { get; private set; }
         internal ConnectionConfiguration Connection { get; private set; }
         internal ISerializer Serializer { get; private set; }
+        internal int Retries { get; private set; }
         internal TimeSpan MaximumTimeout { get; private set; }
         internal int PublishingPoolSize { get; private set; }
         internal int ConsumingPoolSize { get; private set; }
@@ -18,6 +19,7 @@ namespace SimpleCQRS.Client.Configuration
         public ClientConfiguration()
         {
             Serializer = new NullSerializer();
+            Retries = 0;
             MaximumTimeout = TimeSpan.MaxValue;
             PublishingPoolSize = 1;
             ConsumingPoolSize = 1;
@@ -42,6 +44,12 @@ namespace SimpleCQRS.Client.Configuration
             return this;
         }
 
+        public IClientConfiguration SetRetries(int retries)
+        {
+            Retries = retries;
+            return this;
+        }
+        
         public IClientConfiguration SetMaximumTimeout(TimeSpan timeout)
         {
             MaximumTimeout = timeout;

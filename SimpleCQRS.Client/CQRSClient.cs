@@ -3,8 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Polly;
+using Polly.Retry;
 using RabbitMQ.Client;
 using SimpleCQRS.Client.Configuration;
+using SimpleCQRS.Client.Enumerations;
+using SimpleCQRS.Client.Exceptions;
 using SimpleCQRS.Client.Extensions;
 using SimpleCQRS.Loggers;
 using SimpleCQRS.Serializers;
@@ -19,14 +23,22 @@ namespace SimpleCQRS.Client
         private readonly object[] _publisherLocks;
         private long _publisherCurrentIndex = -1;
 
-        private readonly CustomConsumer[] _consumers;
+        private readonly AsyncMessageConsumer[] _consumers;
         private long _consumerCurrentIndex = -1;
         private bool _disposed = false;
+        private readonly AsyncRetryPolicy _retryPolicy;
         
         internal CQRSClient(ClientConfiguration config)
         {
             _config = config;
             _connection = config.CreateConnection();
+            
+            _retryPolicy = Policy.Handle<OperationTimeoutException>()
+                .Or<RequestNotFoundException>()
+                .RetryAsync(Retries, (exception, retryCount) =>
+                    {
+                        // Do nothing
+                    });
             
             _publisherModels = new IModel[PublishingPoolSize];
             _publisherLocks = new object[PublishingPoolSize];
@@ -37,7 +49,7 @@ namespace SimpleCQRS.Client
                 _publisherLocks[i] = new object();
             }
             
-            _consumers = new CustomConsumer[ConsumingPoolSize];
+            _consumers = new AsyncMessageConsumer[ConsumingPoolSize];
             
             for (var i = 0; i < ConsumingPoolSize; i++)
             {
@@ -45,7 +57,7 @@ namespace SimpleCQRS.Client
                 var consumerQueueName = $"req_{Guid.NewGuid().ToString()}";
 
                 consumerModel.QueueDeclare(consumerQueueName, false, true, true, new Dictionary<string, object>());
-                var consumer = _consumers[i] = new CustomConsumer(consumerModel, consumerQueueName);
+                var consumer = _consumers[i] = new AsyncMessageConsumer(consumerModel, Logger, consumerQueueName);
                 consumerModel.BasicConsume(consumerQueueName, true, consumer);
             }
         }
@@ -56,50 +68,62 @@ namespace SimpleCQRS.Client
         private string ServiceName => _config.ServiceName;
         private string OperationName => _config.OperationName;
         private TimeSpan MaximumTimeout => _config.MaximumTimeout;
-        private ISerializer Serializer => _config?.Serializer;
-        private ILogger Logger => _config?.Logger;
+        private ISerializer Serializer => _config.Serializer;
+        private ILogger Logger => _config.Logger;
+        private int Retries => _config.Retries;
         
-        public async Task<TResponse> RequestAsync(TRequest request, CancellationToken ct)
+        public Task<TResponse> RequestAsync(
+            TRequest request,
+            CancellationToken ct,
+            Priority priority = Priority.Normal,
+            Action<IRequestEnhancer> requestEnhancer = null)
         {
             if (_disposed)
             {
                 throw new ObjectDisposedException(GetType().Name);
             }
 
-            try
+            return _retryPolicy.ExecuteAsync(async () =>
             {
-                var requestId = Guid.NewGuid().ToString();
-                var requestData = Serializer.Serialize(request);
-            
-                var publisherIndex = GetNextPublisherIndex(PublishingPoolSize);
-                var publisherModel = _publisherModels[publisherIndex];
-                var publisherLock = _publisherLocks[publisherIndex];
-
-                var consumerIndex = GetNextConsumerIndex(ConsumingPoolSize);
-                var consumer = _consumers[consumerIndex];
-
-                lock (publisherLock)
+                try
                 {
-                    var props = publisherModel.CreateBasicProperties();
-                    props.CorrelationId = requestId;
-                    props.ReplyTo = consumer.QueueName;
+                    var requestId = Guid.NewGuid().ToString();
+                    var requestData = Serializer.Serialize(request);
+            
+                    var publisherIndex = GetNextPublisherIndex(PublishingPoolSize);
+                    var publisherModel = _publisherModels[publisherIndex];
+                    var publisherLock = _publisherLocks[publisherIndex];
 
-                    consumer.AddRequest(requestId);
+                    var consumerIndex = GetNextConsumerIndex(ConsumingPoolSize);
+                    var consumer = _consumers[consumerIndex];
+
+                    lock (publisherLock)
+                    {
+                        var props = publisherModel.CreateBasicProperties();
+                        props.Persistent = false;
+                        props.CorrelationId = requestId;
+                        props.ReplyTo = consumer.QueueName;
+                        props.Priority = priority.GetValue();
+                        
+                        requestEnhancer?.Invoke(new RequestEnhancer(props));
+                        
+                        consumer.AddRequest(requestId);
              
-                    publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);
-                }
+                        publisherModel.BasicPublish(ExchangeName, OperationName, props, requestData);
+                    }
 
-                var responseData = await consumer.GetResponse(requestId, MaximumTimeout, ct);
-                var response = Serializer.Deserialize<TResponse>(responseData);
+                    var responseData = await consumer.GetResponse(requestId, MaximumTimeout, ct);
+                    var response = Serializer.Deserialize<TResponse>(responseData);
                 
-                return response;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log(LogLevel.Error, "An unhandled exception occured.", ex);
+                    return response;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(LogLevel.Error, "An unhandled exception occured.", ex);
                 
-                throw;
-            }
+                    throw;
+                }
+            });
         }
 
         private int GetNextPublisherIndex(int poolSize)

@@ -13,7 +13,8 @@ namespace SimpleCQRS.Client.Extensions
                 Port = config.Connection.Port,
                 VirtualHost = config.Connection.VirtualHost,
                 UserName = config.Connection.UserName,
-                Password = config.Connection.Password
+                Password = config.Connection.Password,
+                DispatchConsumersAsync = true
             };
 
             return connectionFactory.CreateConnection();
